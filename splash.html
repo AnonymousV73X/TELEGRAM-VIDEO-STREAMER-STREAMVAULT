@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    background:#080808;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Segoe UI', system-ui, sans-serif;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  .card {
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    transition:opacity 180ms ease, transform 180ms ease;
+  }
+  .card.out {
+    opacity:0;
+    transform:scale(.97);
+  }
+  .logo-wrap {
+    width:36px; height:36px;
+    background:#f5c518;
+    border-radius:18px;
+    display:flex; align-items:center; justify-content:center;
+    margin-bottom:22px;
+    box-shadow:0 0 48px rgba(245,197,24,0.22), 0 0 0 1px rgba(245,197,24,0.08);
+  }
+  .logo-wrap svg { width:24px; height:24px; }
+  .title {
+    font-size:23px;
+    font-weight:700;
+    letter-spacing:-0.4px;
+    margin-bottom:38px;
+    line-height:1;
+  }
+  .s1 { color:#f5c518; }
+  .s2 { color:#e8e8e8; }
+  .ring {
+    width:32px; height:32px;
+    border:2.5px solid #1e1e1e;
+    border-top-color:#f5c518;
+    border-radius:50%;
+    animation:spin 0.65s linear infinite;
+    margin-bottom:14px;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .status {
+    font-size:10.5px;
+    color:#3a3a3a;
+    letter-spacing:0.8px;
+    text-transform:uppercase;
+    animation:pulse 2.2s ease-in-out infinite;
+    margin-left: 12px;
+  }
+  @keyframes pulse {
+    0%,100%{ opacity:0.45; }
+    50%    { opacity:1;    }
+  }
+  .version {
+    position:fixed;
+    bottom:18px;
+    font-size:9.5px;
+    color:#1f1f1f;
+    letter-spacing:1.2px;
+    text-transform:uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="logo-wrap">
+    <svg viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M11 8L27 17L11 26V8Z" fill="#080808"/>
+    </svg>
+  </div>
+  <div class="title"><span class="s1">Stream</span><span class="s2">Vault</span></div>
+  <div class="ring"></div>
+  <div class="status" id="st">Starting…</div>
+</div>
+<div class="version">StreamVault · Desktop</div>
+<script>
+  var msgs = ["Starting…","Connecting to Telegram…","Loading media…","Almost ready…"];
+  var i = 0;
+  setInterval(function(){
+    i = (i + 1) % msgs.length;
+    document.getElementById('st').textContent = msgs[i];
+  }, 1900);
+  // Called by Python just before load_url() — fades card out smoothly
+  window._sv_dismiss = function() {
+    document.getElementById('card').classList.add('out');
+  };
+</script>
+</body>
+</html>

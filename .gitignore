@@ -1,0 +1,99 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+bin/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script, and contain local paths etc.
+*.manifest
+*.spec
+
+# Installer builds/outputs
+Output/
+
+# Log files
+*.log
+streamvault.log
+debug.log
+pyinstaller-build.err.log
+pyinstaller-build.log
+
+# Databases & local sessions
+*.db
+*.db-shm
+*.db-wal
+*.session
+*.session-journal
+bot_media.db*
+cache_fts.db*
+stream_history.db*
+session.session
+bot_session.session
+streambot.session-journal
+
+# Local caches & generated data
+.cache_key
+.fetch_state.json
+.thumb_key
+.posters/
+.stream_spill/
+hls_cache/
+video_cache/
+vlc_cache/
+imdbcache.json
+tg_albums.json
+tg_cache.json
+deleted_albums.json
+resume.json
+resume_positions.json
+
+# Large temp / test files
+test_tmp.bin
+
+# VS Code directory
+.vscode/
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Node modules & builds (for Electron app)
+node_modules/
+electron_app/node_modules/
+electron_app/dist/
+electron_app/winstate.json
+
+# Environment variables
+.env
+.env.*
+
+# Backups
+*.bak
+

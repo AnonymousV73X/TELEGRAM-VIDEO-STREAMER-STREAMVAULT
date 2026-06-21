@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;user-select:none;-webkit-user-select:none;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+/* ── Grid overlay ── */
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(245,197,24,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(245,197,24,0.03) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,black 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,black 30%,transparent 80%);}
+/* ── Center stage ── */
+.stage{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;transition:opacity 180ms ease;}
+.stage.out{opacity:0;}
+/* ── Icon mark ── */
+.mark{width:56px;height:56px;margin-bottom:28px;opacity:0;animation:up 0.5s cubic-bezier(0.16,1,0.3,1) 0.1s forwards;}
+.mark-inner{width:100%;height:100%;border:1.5px solid rgba(245,197,24,0.35);border-radius:14px;display:flex;align-items:center;justify-content:center;position:relative;background:rgba(245,197,24,0.04);}
+.mark-inner::before{content:'';position:absolute;inset:0;border-radius:13px;background:radial-gradient(circle at 35% 30%,rgba(245,197,24,0.12) 0%,transparent 65%);}
+/* ── Wordmark ── */
+.wordmark{font-size:32px;font-weight:700;letter-spacing:-0.5px;line-height:1;margin-bottom:6px;opacity:0;animation:up 0.55s cubic-bezier(0.16,1,0.3,1) 0.2s forwards;}
+.w-y{color:#f5c518;}
+.w-w{color:#fff;}
+/* ── Sub ── */
+.sub{font-size:10px;font-weight:500;color:#333;letter-spacing:4px;text-transform:uppercase;margin-bottom:48px;opacity:0;animation:fade 0.5s ease 0.35s forwards;}
+/* ── Progress ── */
+.bar-wrap{width:180px;height:1.5px;background:rgba(255,255,255,0.06);margin-bottom:18px;overflow:hidden;opacity:0;animation:fade 0.4s ease 0.55s forwards;}
+.bar-fill{height:100%;background:#f5c518;width:0%;transition:width 0.45s cubic-bezier(0.4,0,0.2,1);}
+/* ── Status ── */
+.status{display:flex;align-items:center;gap:7px;opacity:0;animation:fade 0.4s ease 0.7s forwards;}
+.dot{width:3px;height:3px;border-radius:50%;background:#f5c518;flex-shrink:0;animation:blink 1.2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:.25;}50%{opacity:1;}}
+.status-txt{font-size:9.5px;font-weight:600;color:#3a3a3a;letter-spacing:2.5px;text-transform:uppercase;transition:opacity 0.25s ease;}
+/* ── Bottom line sweep ── */
+.sweep{position:fixed;bottom:0;left:0;right:0;height:1px;background:rgba(245,197,24,0.05);overflow:hidden;}
+.sweep::after{content:'';position:absolute;top:0;left:-40%;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(245,197,24,0.5),transparent);animation:sweep 2s ease-in-out infinite;}
+@keyframes sweep{from{left:-40%;}to{left:140%;}}
+/* ── Edition tag ── */
+.edition{position:fixed;bottom:14px;right:16px;font-size:8px;font-weight:600;color:#1e1e1e;letter-spacing:2.5px;text-transform:uppercase;}
+/* ── Window controls ── */
+#sp-wc{position:fixed;top:10px;right:12px;display:flex;align-items:center;gap:6px;z-index:9999;opacity:0;transition:opacity 200ms ease;}
+.wc{width:11px;height:11px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s,opacity .15s;opacity:.7;}
+.wc:hover{opacity:1;transform:scale(1.25);}
+.wc svg{pointer-events:none;}
+@keyframes up{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+@keyframes fade{from{opacity:0;}to{opacity:1;}}
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<div class="stage" id="stage">
+  <div class="mark"><div class="mark-inner"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 4.5L20 12L6 19.5V4.5Z" fill="#f5c518"/></svg></div></div>
+  <div class="wordmark"><span class="w-y">Stream</span><span class="w-w">Vault</span></div>
+  <div class="sub">Your Telegram Cinema</div>
+  <div class="bar-wrap"><div class="bar-fill" id="prog"></div></div>
+  <div class="status"><div class="dot"></div><div class="status-txt" id="st">Initialising</div></div>
+</div>
+<div id="sp-wc"><button class="wc" id="sp-min" title="Minimise" style="background:#febc2e;width:18px;height:18px;"></button><button class="wc" id="sp-max" title="Maximise" style="background:#28c840;width:18px;height:18px;"></button><button class="wc" id="sp-close" title="Close" style="background:#ff5f57;width:18px;height:18px;"></button></div>
+<div class="sweep"></div>
+<div class="edition">Desktop Edition</div>
+<script>
+(function(){
+  var prog=document.getElementById('prog');
+  var stEl=document.getElementById('st');
+  window._sv_status=function(pct,msg){
+    prog.style.width=pct+'%';
+    stEl.style.opacity='0';
+    setTimeout(function(){stEl.textContent=msg;stEl.style.opacity='1';},140);
+  };
+  window._sv_dismiss=function(){
+    prog.style.width='100%';
+    stEl.style.opacity='0';
+    setTimeout(function(){stEl.textContent='Ready';stEl.style.opacity='1';},180);
+    setTimeout(function(){document.getElementById('stage').classList.add('out');},320);
+  };
+  function _wireWC(){
+    document.getElementById('sp-min').onclick=function(){window.pywebview.api.minimize();};
+    document.getElementById('sp-max').onclick=function(){window.pywebview.api.toggle_max();};
+    document.getElementById('sp-close').onclick=function(){window.pywebview.api.close_win();};
+    document.getElementById('sp-wc').style.opacity='1';
+  }
+  if(window.pywebview){_wireWC();}
+  else{window.addEventListener('pywebviewready',_wireWC);}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!-- Modal overlay for video playback / details -->
+<div id="svModal" class="sv-modal-overlay" style="display:none;">
+  <div class="sv-modal-card">
+    <button class="sv-modal-close" onclick="closeModal()">&times;</button>
+    <div id="svModalBody"></div>
+  </div>
+</div>
+<style>
+  .sv-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9800;
+    background: rgba(0, 0, 0, .72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .sv-modal-card {
+    background: #0d0d0d;
+    border: 1.5px solid #252525;
+    border-radius: 16px;
+    padding: 28px;
+    max-width: 540px;
+    width: 100%;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .8);
+    position: relative;
+  }
+
+  .sv-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: #606060;
+    font-size: 1.4rem;
+    cursor: pointer;
+    transition: color .2s;
+  }
+
+  .sv-modal-close:hover {
+    color: #e8e8e8;
+  }
+</style>
+<script>
+  function openModal(html) { var m = document.getElementById('svModal'); var b = document.getElementById('svModalBody'); if (m && b) { b.innerHTML = html; m.style.display = 'flex'; } }
+  function closeModal() { var m = document.getElementById('svModal'); if (m) m.style.display = 'none'; }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+</script>

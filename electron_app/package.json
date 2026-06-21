@@ -1,0 +1,12 @@
+{
+  "name": "streamvault",
+  "version": "1.0.0",
+  "description": "StreamVault Desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^30.0.0"
+  }
+}

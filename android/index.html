@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamVault · Android Roadmap</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ─── TOKENS ──────────────────────────────────────────────── */
+    :root {
+      --bg: #eaeff5;
+      --sl: #ffffff;
+      --sd: #c8d0dc;
+      --text: #1e2d42;
+      --sub: #7a8899;
+      --muted: #aab5c2;
+      --border: rgba(180, 195, 210, 0.45);
+      --blue: #1d72c8;
+      --green: #0aad8a;
+      --amber: #e8a020;
+      --red: #e83b3b;
+
+      --ru: 6px 6px 16px var(--sd), -6px -6px 16px var(--sl);
+      --rus: 3px 3px 9px var(--sd), -3px -3px 9px var(--sl);
+      --ri: inset 3px 3px 8px var(--sd), inset -3px -3px 8px var(--sl);
+      --ris: inset 2px 2px 5px var(--sd), inset -2px -2px 5px var(--sl);
+
+      --ease: 0.32s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    [data-theme="dark"] {
+      --bg: #1a1f2e;
+      --sl: #222840;
+      --sd: #111420;
+      --text: #d6dfe9;
+      --sub: #5a6680;
+      --muted: #3d4a60;
+      --border: rgba(255, 255, 255, 0.06);
+      --blue: #4b9fe0;
+      --green: #0fc9a6;
+      --amber: #f5b84e;
+      --red: #f06060;
+    }
+
+    /* ─── RESET ───────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background var(--ease), color var(--ease);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── NAV ─────────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 clamp(1.25rem, 5vw, 3rem);
+      height: 60px;
+      box-shadow: 0 2px 12px var(--sd);
+      transition: background var(--ease), box-shadow var(--ease);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-logo {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: var(--blue);
+      box-shadow: var(--rus);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .85rem;
+    }
+
+    .nav-title {
+      font-size: .9rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.01em;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav-chip {
+      padding: 5px 14px;
+      border-radius: 50px;
+      background: var(--bg);
+      box-shadow: var(--rus);
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--blue);
+      border: none;
+      letter-spacing: .02em;
+      white-space: nowrap;
+    }
+
+    .theme-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--bg);
+      box-shadow: var(--rus);
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: box-shadow .15s, background var(--ease);
+    }
+
+    .theme-btn:active {
+      box-shadow: var(--ris);
+    }
+
+    /* ─── HERO ────────────────────────────────────────────────── */
+    .hero {
+      padding: clamp(3rem, 8vw, 5rem) clamp(1.25rem, 5vw, 3rem) clamp(2rem, 5vw, 3.5rem);
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 1rem;
+    }
+
+    .eyebrow::before {
+      content: '';
+      display: inline-block;
+      width: 18px;
+      height: 2px;
+      background: var(--blue);
+      border-radius: 2px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -.03em;
+      margin-bottom: .9rem;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--blue);
+    }
+
+    .hero-desc {
+      font-size: clamp(.88rem, 2vw, 1rem);
+      color: var(--sub);
+      line-height: 1.7;
+      max-width: 540px;
+      margin-bottom: 2rem;
+    }
+
+    .rec-card {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: var(--bg);
+      box-shadow: var(--rus);
+      max-width: 520px;
+    }
+
+    .rec-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .rec-text {
+      font-size: .8rem;
+      color: var(--sub);
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .rec-text strong {
+      color: var(--text);
+      display: block;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    /* ─── PHASES ──────────────────────────────────────────────── */
+    .phases {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 5vw, 3rem) clamp(3rem, 6vw, 4rem);
+      display: flex;
+      flex-direction: column;
+      gap: 3rem;
+    }
+
+    .phase-label {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 1.25rem;
+    }
+
+    .phase-num {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--bg);
+      box-shadow: var(--rus);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .75rem;
+      font-weight: 700;
+      color: var(--blue);
+      flex-shrink: 0;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .phase-name {
+      font-size: .95rem;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+
+    .phase-time {
+      font-size: .72rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* ─── CARDS ───────────────────────────────────────────────── */
+    .items {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
+      gap: 16px;
+    }
+
+    .item-card {
+      background: var(--bg);
+      border-radius: 18px;
+      box-shadow: var(--ru);
+      padding: 20px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: box-shadow var(--ease);
+      animation: up .4s both;
+    }
+
+    .item-card:hover {
+      box-shadow: 8px 8px 20px var(--sd), -8px -8px 20px var(--sl);
+    }
+
+    .item-card:nth-child(1) {
+      animation-delay: .05s;
+    }
+
+    .item-card:nth-child(2) {
+      animation-delay: .10s;
+    }
+
+    .item-card:nth-child(3) {
+      animation-delay: .15s;
+    }
+
+    .item-card:nth-child(4) {
+      animation-delay: .20s;
+    }
+
+    @keyframes up {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card-name {
+      font-size: .88rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .card-file {
+      font-size: .64rem;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      display: block;
+      margin-top: 3px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 50px;
+      font-size: .64rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      box-shadow: var(--rus);
+      background: var(--bg);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tg {
+      color: var(--green);
+    }
+
+    .tb {
+      color: var(--blue);
+    }
+
+    .ta {
+      color: var(--amber);
+    }
+
+    .tr {
+      color: var(--red);
+    }
+
+    .card-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .row-label {
+      font-size: .61rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .row-text {
+      font-size: .78rem;
+      color: var(--sub);
+      line-height: 1.55;
+      margin-top: 2px;
+    }
+
+    code {
+      font-family: 'DM Mono', monospace;
+      font-size: .72em;
+      background: var(--bg);
+      box-shadow: var(--ris);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--blue);
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 12px;
+      border-top: 1.5px solid var(--border);
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* EFFORT */
+    .effort {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .el {
+      font-size: .6rem;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      margin-right: 2px;
+    }
+
+    .pip {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--bg);
+      box-shadow: var(--ris);
+      transition: background var(--ease), box-shadow var(--ease);
+    }
+
+    .pip.on {
+      background: var(--blue);
+      box-shadow: 1px 1px 3px rgba(30, 114, 200, .35), -1px -1px 3px rgba(255, 255, 255, .2);
+    }
+
+    /* BLOCKER */
+    .blocker {
+      display: inline-flex;
+      align-items: flex-start;
+      gap: 4px;
+      font-size: .68rem;
+      color: var(--sub);
+      font-weight: 500;
+      line-height: 1.4;
+      text-align: right;
+      max-width: 170px;
+    }
+
+    .bi {
+      font-size: .65rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ─── FOOTER ──────────────────────────────────────────────── */
+    footer {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 clamp(1.25rem, 5vw, 3rem) 3rem;
+    }
+
+    .footer-card {
+      background: var(--bg);
+      border-radius: 18px;
+      box-shadow: var(--rus);
+      padding: 20px 24px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .footer-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--bg);
+      box-shadow: var(--rus);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .footer-title {
+      font-size: .84rem;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .footer-text {
+      font-size: .78rem;
+      color: var(--sub);
+      line-height: 1.65;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .legend-text {
+      font-size: .7rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ─── RESPONSIVE ──────────────────────────────────────────── */
+    @media(max-width:520px) {
+      .items {
+        grid-template-columns: 1fr;
+      }
+
+      .nav-chip {
+        display: none;
+      }
+    }
+
+    @media(min-width:521px) and (max-width:700px) {
+      .items {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <nav>
+    <div class="nav-brand">
+      <div class="nav-logo">📱</div>
+      <span class="nav-title">StreamVault</span>
+    </div>
+    <div class="nav-right">
+      <span class="nav-chip">Android Roadmap</span>
+      <button class="theme-btn" id="themeBtn">🌙</button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="eyebrow">Migration Plan</div>
+    <h1>Android is <em>closer</em><br>than you think.</h1>
+    <p class="hero-desc">A phased path from zero-rewrite to full native Kotlin — pick your stop. Most users ship in
+      days, not months.</p>
+    <div class="rec-card">
+      <span class="rec-icon">⚡</span>
+      <div class="rec-text">
+        <strong>Recommended path</strong>
+        Capacitor wrapper → Progressive Web App → native Kotlin last
+      </div>
+    </div>
+  </header>
+
+  <main class="phases">
+
+    <!-- 01 -->
+    <section>
+      <div class="phase-label">
+        <div class="phase-num">01</div>
+        <div>
+          <div class="phase-name">Zero-rewrite</div>
+          <div class="phase-time">Ship in days</div>
+        </div>
+      </div>
+      <div class="items">
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Web UI</div><span class="card-file">render.py · style.css · virtual_album.js</span>
+            </div>
+            <span class="tag tg">Capacitor</span>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Full responsive HTML/CSS virtual grid already built</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Wrap with Ionic Capacitor — zero HTML changes. Bridges native APIs (camera, share,
+                filesystem) via plugins.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Sign .apk + Play Store listing</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Auth</div><span class="card-file">routes.py cookie</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">SHA-256 token in httpOnly cookie</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Capacitor handles cookies natively. No change needed for local LAN access.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Remote access needs HTTPS + reverse proxy</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Video Playback</div><span class="card-file">/stream/ · HLS</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">aiohttp range-request server + HLS pipeline</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">ExoPlayer plays HLS natively. Point at <code>/hls/{id}/playlist.m3u8</code> — no
+                server change.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>ExoPlayer needs Capacitor plugin or Kotlin bridge</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section>
+      <div class="phase-label">
+        <div class="phase-num">02</div>
+        <div>
+          <div class="phase-name">PWA Install</div>
+          <div class="phase-time">Ship in a week</div>
+        </div>
+      </div>
+      <div class="items">
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">App Install</div><span class="card-file">no manifest yet</span>
+            </div>
+            <span class="tag tb">PWA</span>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">aiohttp serves static files</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Add <code>manifest.json</code> + service worker. Chrome on Android shows "Add to
+                Home Screen" — standalone app, no browser chrome.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>HTTPS required (Caddy/nginx or Cloudflare Tunnel)</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Offline Cache</div><span class="card-file">style.css · JS</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">CSS + JS already static files</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Service worker caches shell. App opens instantly before Python server responds.
+                Stale-while-revalidate for thumbnails.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi" style="color:var(--green)">✓</span>None — pure JS</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Push Notifications</div><span class="card-file">not present</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Background sync in <code>_background_incremental_sync</code></div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Web Push API from service worker. Python sends push via <code>pywebpush</code> when
+                new videos arrive.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>VAPID keys + HTTPS</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 -->
+    <section>
+      <div class="phase-label">
+        <div class="phase-num">03</div>
+        <div>
+          <div class="phase-name">Backend Portability</div>
+          <div class="phase-time">Weeks</div>
+        </div>
+      </div>
+      <div class="items">
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Python Server</div><span class="card-file">alpha.py · aiohttp</span>
+            </div>
+            <span class="tag ta">Keep on PC/VPS</span>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Runs on desktop/server</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Android stays a thin client. Expose via Tailscale or Cloudflare Tunnel — no port
+                forwarding needed.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Server must stay on</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Telethon / TG Client</div><span class="card-file">config.py</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Desktop MTProto session</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Cannot run on Android — no CPython runtime. Must remain server-side. Android calls
+                your REST API only.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Architecture constraint — not portable</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">SQLite FTS5</div><span class="card-file">cache_fts.db</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Server-side search index</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Keep server-side, or ship a read-only copy via <code>/api/fts_dump</code> and use
+                sql.js (SQLite in WASM) for offline search.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>WASM bundle size (~1.5 MB)</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Thumbnail Encryption</div><span class="card-file">cache.py XOR</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">XOR-encrypted .jpg files on disk</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">No change — <code>/thumb/{id}</code> decrypts server-side before serving. App loads
+                normal image URLs.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi" style="color:var(--green)">✓</span>None</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 -->
+    <section>
+      <div class="phase-label">
+        <div class="phase-num">04</div>
+        <div>
+          <div class="phase-name">Full Native</div>
+          <div class="phase-time">Months · Optional</div>
+        </div>
+      </div>
+      <div class="items">
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">UI Rewrite</div><span class="card-file">render.py HTML</span>
+            </div>
+            <span class="tag tr">Kotlin</span>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Virtual grid, album pages, manage UI</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Jetpack Compose <code>LazyVerticalGrid</code> replaces your JS virtual grid. Native
+                gesture physics, predictive back, edge-to-edge.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Full rewrite of all UI</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Media3 / ExoPlayer</div><span class="card-file">streaming.py</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">Python HLS + range-request server</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">Jetpack Media3 with <code>HlsMediaSource</code>. Background playback, media
+                notifications, Android Auto out of the box.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Server HLS must stay — Media3 is client only</span>
+          </div>
+        </div>
+        <div class="item-card">
+          <div class="card-top">
+            <div>
+              <div class="card-name">Play Store</div><span class="card-file">distribution</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div>
+              <div class="row-label">You have</div>
+              <div class="row-text">—</div>
+            </div>
+            <div>
+              <div class="row-label">Approach</div>
+              <div class="row-text">$25 one-time dev fee. Private or public listing. APK sideload works for personal use
+                with no fee.</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="effort"><span class="el">Effort</span>
+              <div class="pip on"></div>
+              <div class="pip on"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+              <div class="pip"></div>
+            </div>
+            <span class="blocker"><span class="bi">⚠️</span>Telegram ToS risk for public listing</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="footer-card">
+      <div class="footer-icon">🚀</div>
+      <div>
+        <div class="footer-title">Fastest path to Android</div>
+        <div class="footer-text">Tailscale on your PC → Capacitor WebView wrapping your existing URL → ExoPlayer
+          Capacitor plugin for video. Working APK in under a week, zero Python changes.</div>
+        <div class="legend">
+          <div class="pip on"></div>
+          <span class="legend-text">Effort scale: filled pips out of 5</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const btn = document.getElementById('themeBtn');
+    const html = document.documentElement;
+    const stored = localStorage.getItem('sv-theme');
+    const init = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    html.setAttribute('data-theme', init);
+    btn.textContent = init === 'dark' ? '☀️' : '🌙';
+    btn.addEventListener('click', () => {
+      const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      btn.textContent = next === 'dark' ? '☀️' : '🌙';
+      localStorage.setItem('sv-theme', next);
+    });
+  </script>
+</body>
+
+</html>
