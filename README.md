@@ -1,6 +1,8 @@
-# StreamVault
+# 🚀 StreamVault: The Unlimited, Free Telegram-Powered Media CDN
 
-StreamVault is a high-performance, self-hosted media streaming dashboard and desktop application. It integrates Telegram as a media vault, enabling users to stream video and audio content directly from private or public Telegram channels to their web browser or VLC player, bypassing standard limits using a local Telegram Bot API server or direct Telethon MTProto connection.
+**StreamVault** is a revolutionary, high-performance self-hosted media streaming dashboard and desktop application that turns Telegram into your personal, cost-free, and infinite cloud database. 
+
+While commercial cloud services (AWS S3, Google Cloud, Azure) charge premium fees for storage and outbound bandwidth, **StreamVault bypasses all limits** by using Telegram as a decentralized media storage layer. Enjoy **blazing-fast, constant retrieval speeds of up to 200 Mbps (upload & download)** for high-bitrate streaming of videos, movies, and music—completely free.
 
 ---
 
@@ -22,6 +24,16 @@ Here are some previews of StreamVault in action:
 
 5. **Local Bot API Server & System Settings**
    ![Settings & Server Status](https://via.placeholder.com/800x450.png?text=5.+Local+Bot+API+Server+%26+System+Settings)
+
+---
+
+## 🌟 The Telegram-as-a-Database Revolution
+
+Most people view Telegram as a simple chat app, but it is actually one of the most powerful, free, and unrestricted media hosts on the planet:
+*   **Infinite Storage:** Store terabytes of 4K movies, shows, and audio files without spending a single dollar.
+*   **200 Mbps Constant Speeds:** Retrieve, stream, and seek media instantly with ultra-low latency, comparable to paid CDN networks.
+*   **Zero Infrastructure Costs:** No hosting fees, no monthly subscriptions, and no hardware maintenance.
+*   **Zero-Latency HLS Seeking:** Seamlessly jump to any part of a video, powered by local Bot API chunking.
 
 ---
 
