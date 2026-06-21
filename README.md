@@ -11,19 +11,16 @@ While commercial cloud services (AWS S3, Google Cloud, Azure) charge premium fee
 Here are some previews of StreamVault in action:
 
 1. **Dashboard & Media Library Overview**
-   ![Dashboard Preview](https://via.placeholder.com/800x450.png?text=1.+Dashboard+%26+Media+Library+Overview)
+   ![Dashboard Preview](assets/dashboard.png)
 
 2. **Album & Media Details**
-   ![Album Details Preview](https://via.placeholder.com/800x450.png?text=2.+Album+%26+Media+Details)
+   ![Album Details Preview](assets/albumz-detail.png)
 
-3. **In-Browser HLS Video Player**
-   ![HLS Player Preview](https://via.placeholder.com/800x450.png?text=3.+In-Browser+HLS+Video+Player)
+3. **VLC Stream Player & Control Panel**
+   ![VLC Player Integration](assets/vlc_integration.png)
 
-4. **VLC Stream Player & Control Panel**
-   ![VLC Player Integration](https://via.placeholder.com/800x450.png?text=4.+VLC+Stream+Player+%26+Control+Panel)
-
-5. **Local Bot API Server & System Settings**
-   ![Settings & Server Status](https://via.placeholder.com/800x450.png?text=5.+Local+Bot+API+Server+%26+System+Settings)
+4. **System Settings**
+   ![Settings & Server Status](assets/settingz%20(1).png)
 
 ---
 
