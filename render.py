@@ -278,7 +278,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 def _nav(placeholder="Search albums…", show_search=True):
     return f"""<nav>
-  <a class="logo" href="/"><div class="logo-icon"><svg viewBox="-0.5 0 7 7"><path transform="translate(-291,-3606)" d="M296.494737,3608.57322 L292.500752,3606.14219 C291.83208,3605.73542 291,3606.25002 291,3607.06891 L291,3611.93095 C291,3612.7509 291.83208,3613.26444 292.500752,3612.85767 L296.494737,3610.42771 C297.168421,3610.01774 297.168421,3608.98319 296.494737,3608.57322" fill="currentColor"/></svg></div><span style="display:inline-flex;gap:0"><span style="color:var(--accent)">Stream</span><span style="color:#e8e8e8">Vault</span></span></a>
+  <a class="logo" href="/"><div class="logo-icon"><svg viewBox="-0.5 0 7 7"><path transform="translate(-291,-3606)" d="M296.494737,3608.57322 L292.500752,3606.14219 C291.83208,3605.73542 291,3606.25002 291,3607.06891 L291,3611.93095 C291,3612.7509 291.83208,3613.26444 292.500752,3612.85767 L296.494737,3610.42771 C297.168421,3610.01774 297.168421,3608.98319 296.494737,3608.57322"/></svg></div><span style="display:inline-flex;gap:0"><span style="color:var(--accent)">Stream</span><span style="color:#e8e8e8">Vault</span></span></a>
   <div class="search-wrap" style="margin-left:auto;margin-right:8px;{"" if show_search else "display:none;"}">
     <div class="search-box">
       <svg class="search-ico" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

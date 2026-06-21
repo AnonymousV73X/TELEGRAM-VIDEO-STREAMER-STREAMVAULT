@@ -95,7 +95,7 @@ _notifications: list = []
 
 # Watermark: count of uncategorized videos the user has already "seen".
 # Badge shows max(0, current_count - _seen_watermark).
-_seen_watermark: int = 0
+_seen_watermark: int = -1
 
 
 def _push_notification(msg: str, kind: str = "warn") -> None:
@@ -605,6 +605,8 @@ async def route_uncategorized_count(req: web.Request):
     if cached is None:
         cached = get_uncategorized_count()
         api_cache_set("uncategorized_count", cached)
+    if _seen_watermark == -1:
+        _seen_watermark = cached
     delta = max(0, cached - _seen_watermark)
     return _fast_json_response({"ok": True, "count": delta})
 
