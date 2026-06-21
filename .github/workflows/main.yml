@@ -1,0 +1,34 @@
+name: Build Windows telegram-bot-api
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout telegram-bot-api
+        run: git clone --recursive https://github.com/tdlib/telegram-bot-api.git src
+
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/Microsoft/vcpkg.git
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe install gperf:x64-windows openssl:x64-windows zlib:x64-windows
+
+      - name: Configure
+        run: |
+          cd src
+          mkdir build
+          cd build
+          cmake -A x64 -DCMAKE_INSTALL_PREFIX:PATH=.. -DCMAKE_TOOLCHAIN_FILE:FILEPATH=../../vcpkg/scripts/buildsystems/vcpkg.cmake ..
+
+      - name: Build
+        run: cmake --build src/build --target install --config Release
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-bot-api-windows
+          path: src/bin/telegram-bot-api.exe
