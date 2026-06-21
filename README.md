@@ -92,15 +92,23 @@ HOST=0.0.0.0
 
 ### 2. Run the Application
 
-#### Option A: Running the Electron Desktop App (Recommended)
-This boots the headless Python backend automatically and starts the Electron client:
+#### Option A: `launcher.pyw` — Native Desktop App ✅ (Recommended / Primary)
+StreamVault's primary launcher. Uses **pywebview** to render the UI inside a native Windows frameless window — no browser needed. Double-click the file or run:
+```bash
+python launcher.pyw
+```
+> This is the **recommended way** to run StreamVault on Windows. It boots the backend, connects to Telegram, and opens the UI automatically in a native window.
+
+#### Option B: `electron.py` — Electron Desktop App (Secondary)
+An alternative launcher that wraps the UI in an **Electron** window instead of pywebview. Requires **Node.js** installed:
 ```bash
 python electron.py
 ```
 
-#### Option B: Web UI Only
-To run the server in web-only mode without the Electron GUI:
+#### Option C: Web UI Only (Headless / Server Mode)
+To run the backend server only and access it from any browser on your network:
 ```bash
 python alpha.py
 ```
 Then visit `http://localhost:5000` in your browser.
+
