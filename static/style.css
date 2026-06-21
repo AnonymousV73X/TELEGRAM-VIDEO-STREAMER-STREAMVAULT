@@ -17,7 +17,7 @@ body{padding-top:60px;}
 .logo{font-size:1.2rem;font-weight:800;letter-spacing:-.03em;color:var(--text);text-decoration:none;white-space:nowrap;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .logo em{font-style:normal;color:var(--accent);}
 .logo-icon{width:28px;height:28px;border-radius:7px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.logo-icon svg{fill:#000;width:13px;height:13px;}
+.logo-icon svg{fill:#000;width:9px;height:9px; margin-left: 2px;}
 .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0;}
 .nav-links{display:flex;align-items:center;gap:8px;}
 .search-wrap{flex:1;display:flex;justify-content:flex-end;max-width:280px;}

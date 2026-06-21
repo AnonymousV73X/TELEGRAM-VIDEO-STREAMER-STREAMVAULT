@@ -152,12 +152,12 @@ BOT_API_LOG = os.environ.get("BOT_API_LOG", "")
 VLC_BLOCK_SIZE = int(
     os.environ.get("VLC_BLOCK_SIZE", 1 * 1024 * 1024)
 )  # bytes per MTProto call
-VLC_WORKERS = int(os.environ.get("VLC_WORKERS", 2))  # parallel download workers
+VLC_WORKERS = int(os.environ.get("VLC_WORKERS", 4))  # parallel download workers
 VLC_WRITE_CHUNK = int(
     os.environ.get("VLC_WRITE_CHUNK", 512 * 1024)
 )  # bytes per resp.write()
 VLC_PREFETCH_BLOCKS = int(
-    os.environ.get("VLC_PREFETCH_BLOCKS", 30)
+    os.environ.get("VLC_PREFETCH_BLOCKS", 40)
 )  # blocks to pre-fetch ahead of cursor
 
 # ── STREAMING RESILIENCE / RETRY TUNING ─────────────────────────────────────────
