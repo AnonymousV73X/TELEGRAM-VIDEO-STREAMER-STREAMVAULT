@@ -59,8 +59,8 @@ BATCH = int(os.getenv("BATCH_SIZE", "50"))
 PATTERN = re.compile(r"PRT", re.IGNORECASE)
 
 # Raw channel IDs (no -100 prefix needed — Telethon handles it)
-SOURCE_RAW = int(os.getenv("SOURCE_CHANNEL", "3774125820"))
-DEST_RAW = int(os.getenv("DEST_CHANNEL", "2861397005"))
+SOURCE_RAW = int(os.getenv("SOURCE_CHANNEL", ""))
+DEST_RAW = int(os.getenv("DEST_CHANNEL", ""))
 
 
 def get_file_name(msg) -> str:
