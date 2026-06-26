@@ -556,6 +556,9 @@ def _render_index(albums, total):
         m = a.get("meta", {}) or {}
         year = m.get("year", "") or ""
         year = re.sub(r"[\u2013\u2014\-]+\s*$", "", year).strip()
+        # Find latest video update date in the album
+        dates = [v.get("date", "") for v in a.get("videos", []) if v.get("date")]
+        latest_date = max(dates) if dates else ""
         album_data.append(
             {
                 "name": a["name"],
@@ -567,6 +570,7 @@ def _render_index(albums, total):
                 "rating": _fmt_rating(m.get("rating", "") or ""),
                 "mtype": m.get("type", "") or "",
                 "plot": (m.get("plot", "") or "")[:300],
+                "updated": latest_date,
             }
         )
 
@@ -585,7 +589,8 @@ def _render_index(albums, total):
     </div>
   </div>
   <div class="sec-row"><h2>Albums</h2><span class="pill">{len(albums)}</span><div class="divider"></div>
-    <div style="display:flex;gap:6px;margin-left:auto;">
+    <div style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+      <span style="font-size:0.7rem;color:var(--text3);font-weight:600;margin-right:2px;text-transform:uppercase;letter-spacing:0.5px;">Filter:</span>
       <button class="alb-filter-btn"        id="fltAll"    onclick="_setFilter('all')">All</button>
       <button class="alb-filter-btn active" id="fltSeries" onclick="_setFilter('series')">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
@@ -594,6 +599,15 @@ def _render_index(albums, total):
       <button class="alb-filter-btn"        id="fltMovies" onclick="_setFilter('movie')">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 2v20M17 2v20M2 12h20M2 7h5M17 7h5M2 17h5M17 17h5"/></svg>
         Movies
+      </button>
+      <span style="font-size:0.7rem;color:var(--text3);font-weight:600;margin-left:10px;margin-right:2px;text-transform:uppercase;letter-spacing:0.5px;">Sort:</span>
+      <button class="alb-filter-btn active" id="srtDate" onclick="_setSort('date')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Recent
+      </button>
+      <button class="alb-filter-btn" id="srtAlpha" onclick="_setSort('alpha')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
+        A-Z
       </button>
     </div>
   </div>
@@ -653,6 +667,7 @@ def _render_index(albums, total):
   function _overscan(){{ return 2+Math.min(4,Math.floor(Math.abs(_vy)/0.4)); }}
   var _filtered = [];
   var _activeFilter = (function(){{try{{return sessionStorage.getItem('sv_home_filter')||'series';}}catch(e){{return 'series';}}}})();
+  var _activeSort = (function(){{try{{return sessionStorage.getItem('sv_home_sort')||'date';}}catch(e){{return 'date';}}}})();
   function rowCount(){{ return Math.ceil(_filtered.length/COLS); }}
   function totalH(){{ return Math.max(0,rowCount()*(CARD_H+GAP)-GAP)+80; }}
   function cardTop(i){{ return Math.floor(i/COLS)*(CARD_H+GAP); }}
@@ -758,6 +773,18 @@ def _render_index(albums, total):
       var matchT=_activeFilter==='all'||a.mtype.toLowerCase()===_activeFilter;
       return matchQ&&matchT;
     }});
+    if(_activeSort==='date'){{
+      _filtered.sort(function(a,b){{
+        var da=a.updated||'';
+        var db=b.updated||'';
+        if(da!==db) return db.localeCompare(da);
+        return a.name.localeCompare(b.name);
+      }});
+    }}else if(_activeSort==='alpha'){{
+      _filtered.sort(function(a,b){{
+        return a.name.localeCompare(b.name);
+      }});
+    }}
   }}
   window._setFilter=function(type){{
     _activeFilter=type;
@@ -766,6 +793,19 @@ def _render_index(albums, total):
       var id='flt'+l,el=document.getElementById(id);
       if(el)el.classList.toggle('active',
         (l==='All'&&type==='all')||(l==='Series'&&type==='series')||(l==='Movies'&&type==='movie'));
+    }});
+    var q=document.getElementById('searchInput');
+    _rebuildFiltered(q?q.value.toLowerCase().trim():'');
+    resetPool();window.scrollTo({{top:0,behavior:'instant'}});
+    _recacheLayout();var th=totalH()+'px';sentinel.style.height=th;grid.style.minHeight=th;render();
+  }};
+  window._setSort=function(type){{
+    _activeSort=type;
+    try{{sessionStorage.setItem('sv_home_sort',type);}}catch(e){{}}
+    ['Date','Alpha'].forEach(function(l){{
+      var id='srt'+l,el=document.getElementById(id);
+      if(el)el.classList.toggle('active',
+        (l==='Date'&&type==='date')||(l==='Alpha'&&type==='alpha'));
     }});
     var q=document.getElementById('searchInput');
     _rebuildFiltered(q?q.value.toLowerCase().trim():'');
@@ -834,6 +874,10 @@ def _render_index(albums, total):
   ['All','Series','Movies'].forEach(function(l){{
     var id='flt'+l,el=document.getElementById(id);
     if(el)el.classList.toggle('active', (l==='All'&&_activeFilter==='all')||(l==='Series'&&_activeFilter==='series')||(l==='Movies'&&_activeFilter==='movie'));
+  }});
+  ['Date','Alpha'].forEach(function(l){{
+    var id='srt'+l,el=document.getElementById(id);
+    if(el)el.classList.toggle('active', (l==='Date'&&_activeSort==='date')||(l==='Alpha'&&_activeSort==='alpha'));
   }});
   requestAnimationFrame(function(){{
     _recacheLayout();
