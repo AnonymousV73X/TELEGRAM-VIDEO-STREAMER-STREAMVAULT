@@ -1452,7 +1452,7 @@ async def _launch_vlc_direct(
             f"--http-password={_VLC_HTTP_PASS}",
             # Loopback delivery — reduce network-caching since 127.0.0.1 has
             # no real network jitter; large values only delay first-frame render.
-            "--network-caching=1500",
+            "--network-caching=2000",
             "--file-caching=0",
             "--live-caching=0",
             "--disc-caching=0",
