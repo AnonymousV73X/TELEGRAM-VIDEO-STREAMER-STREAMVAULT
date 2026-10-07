@@ -131,7 +131,7 @@
     var mr = meta ? '<div class="video-meta-row">' + meta + "</div>" : "";
     var displayName =
       v.caption && v.caption.trim() ? v.caption.trim() : v.title;
-    var playText = v.is_downloaded ? "Play" : "Play in VLC";
+    var playText = v.is_downloaded ? "Play" : "Stream";
     var copyBtn = v.is_downloaded
       ? ""
       : '<button class="play-btn-copy copy-btn" title="Copy stream URL" onclick="event.stopPropagation();copyUrl(\'' +

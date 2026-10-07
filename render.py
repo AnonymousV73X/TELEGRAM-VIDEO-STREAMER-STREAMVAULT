@@ -1583,7 +1583,7 @@ function _updateCardDlButtons(id, isDl){{
 
   var playBtn = row.querySelector('.play-btn');
   if(playBtn){{
-    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="11" height="11"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>' + (isDl ? 'Play' : 'Play in VLC');
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="11" height="11"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>' + (isDl ? 'Play' : 'Stream');
   }}
 
   var copyBtn = row.querySelector('.copy-btn');
