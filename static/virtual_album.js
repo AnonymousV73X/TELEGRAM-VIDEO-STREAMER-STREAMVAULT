@@ -194,6 +194,17 @@
             ',this)">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
             '</button>') +
+        '<div class="card-dots-wrap" onclick="event.stopPropagation();">' +
+        '<button class="card-dots-btn" title="Options" onclick="event.stopPropagation();_toggleCardMenu(' + v.id + ',this)">' +
+        '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>' +
+        '</button>' +
+        '<div class="card-dots-menu" id="cardMenu_' + v.id + '">' +
+        '<button class="card-dots-item danger" onclick="event.stopPropagation();_deleteCardVideo(' + v.id + ')">' +
+        '<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        'Delete' +
+        '</button>' +
+        '</div>' +
+        '</div>' +
         "</div>" +
         "</div>"
       );
@@ -615,9 +626,49 @@
       else window._selectedIds.delete(vid.id);
     }
     _lassoApplySelected();
+    _syncLassoUI();
 
     _lasso_raf = requestAnimationFrame(_lassoFrame);
   }
+
+  // ── Floating Selection Action Bar ───────────────────────────────────────────
+  var _selBar = null;
+  function _ensureSelBar() {
+    if (_selBar) return _selBar;
+    _selBar = document.createElement("div");
+    _selBar.id = "albSelectionBar";
+    _selBar.className = "alb-selection-bar";
+    _selBar.innerHTML =
+      '<span class="alb-sel-count" id="albSelCount">0 selected</span>' +
+      '<button class="alb-sel-btn danger" onclick="_deleteSelectedVideos()">' +
+      '<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+      'Delete Selected' +
+      '</button>' +
+      '<button class="alb-sel-btn secondary" onclick="_clearLassoSelection()">' +
+      'Cancel' +
+      '</button>';
+    document.body.appendChild(_selBar);
+    return _selBar;
+  }
+
+  function _syncLassoUI() {
+    var bar = _ensureSelBar();
+    var count = window._selectedIds.size;
+    if (count > 0) {
+      var countEl = document.getElementById("albSelCount");
+      if (countEl)
+        countEl.textContent = count + " selected";
+      bar.classList.add("visible");
+    } else {
+      bar.classList.remove("visible");
+    }
+  }
+
+  window._clearLassoSelection = function () {
+    window._selectedIds.clear();
+    _lassoApplySelected();
+    _syncLassoUI();
+  };
 
   function _lassoStart(e) {
     if (e.button !== 0) return;
@@ -658,7 +709,147 @@
     document.body.style.userSelect = "";
     document.body.style.webkitUserSelect = "";
     if (_lasso) _lasso.style.display = "none";
+    _syncLassoUI();
   }
+
+  // ── 3-Dots Menu & Video Deletion ────────────────────────────────────────────
+  var _activeMenuId = null;
+
+  window._toggleCardMenu = function (id, btn) {
+    var menu = document.getElementById("cardMenu_" + id);
+    if (!menu) return;
+    var isOpen = menu.classList.contains("open");
+    _closeCardMenus();
+    if (!isOpen) {
+      menu.classList.add("open");
+      _activeMenuId = id;
+    }
+  };
+
+  function _closeCardMenus() {
+    document.querySelectorAll(".card-dots-menu.open").forEach(function (m) {
+      m.classList.remove("open");
+    });
+    _activeMenuId = null;
+  }
+
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".card-dots-wrap")) {
+      _closeCardMenus();
+    }
+  });
+
+  function _syncAfterDelete(deletedIds) {
+    if (!deletedIds || !deletedIds.length) return;
+    var delSet = new Set(deletedIds.map(Number));
+
+    // Remove from in-memory arrays
+    allVideos = allVideos.filter(function (v) {
+      return !delSet.has(Number(v.id));
+    });
+    deletedIds.forEach(function (id) {
+      delete _videoById[id];
+      delete _html[id];
+      window._selectedIds.delete(id);
+    });
+
+    if (window._VDATA && Array.isArray(window._VDATA)) {
+      window._VDATA = window._VDATA.filter(function (v) {
+        return !delSet.has(Number(v.id));
+      });
+    }
+
+    // Rebuild filtered dataset with current search query
+    var q = ((document.getElementById("searchInput") || {}).value || "")
+      .toLowerCase()
+      .trim();
+    rebuildFiltered(q);
+
+    // Reset slot pool and re-layout
+    resetPool();
+    _recacheLayout();
+    sentinel.style.height = totalH() + "px";
+    render();
+    _syncLassoUI();
+  }
+
+  window._deleteCardVideo = function (id) {
+    _closeCardMenus();
+    var video = _videoById[id];
+    var title = video ? (video.title || "this video") : "this video";
+
+    var confirmFn = window._svAlert || function (opts) {
+      if (confirm(opts.body)) opts.onConfirm();
+    };
+
+    confirmFn({
+      title: "Remove from Cache?",
+      body: 'Remove "' + title + '" from the local cache? Does NOT delete from Telegram — hit Refresh to restore.',
+      confirmText: "Remove",
+      cancelText: "Cancel",
+      danger: true,
+      onConfirm: async function () {
+        try {
+          var r = await fetch("/api/delete_videos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ msg_ids: [id] }),
+          });
+          var j = await r.json();
+          if (j.ok) {
+            _syncAfterDelete([id]);
+            if (window._svNotify)
+              window._svNotify("✓ Removed 1 video from cache");
+          } else {
+            if (window._svNotify)
+              window._svNotify("Error: " + (j.error || "failed"), true);
+          }
+        } catch (err) {
+          if (window._svNotify)
+            window._svNotify("Network error deleting video", true);
+        }
+      },
+    });
+  };
+
+  window._deleteSelectedVideos = function () {
+    if (!window._selectedIds || !window._selectedIds.size) return;
+    var ids = Array.from(window._selectedIds).map(Number);
+    var count = ids.length;
+
+    var confirmFn = window._svAlert || function (opts) {
+      if (confirm(opts.body)) opts.onConfirm();
+    };
+
+    confirmFn({
+      title: "Remove Selected from Cache?",
+      body: "Remove " + count + " selected video" + (count !== 1 ? "s" : "") + " from the local cache? Does NOT delete from Telegram — hit Refresh to restore.",
+      confirmText: "Remove All",
+      cancelText: "Cancel",
+      danger: true,
+      onConfirm: async function () {
+        try {
+          var r = await fetch("/api/delete_videos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ msg_ids: ids }),
+          });
+          var j = await r.json();
+          if (j.ok) {
+            _syncAfterDelete(ids);
+            if (window._svNotify)
+              window._svNotify("✓ Removed " + (j.removed || count) + " videos from cache");
+          } else {
+            if (window._svNotify)
+              window._svNotify("Error: " + (j.error || "failed"), true);
+          }
+        } catch (err) {
+          if (window._svNotify)
+            window._svNotify("Network error deleting videos", true);
+        }
+      },
+    });
+  };
 
   // render() — public entry point; re-stamps .lasso-selected after slot recycling
   function render() {

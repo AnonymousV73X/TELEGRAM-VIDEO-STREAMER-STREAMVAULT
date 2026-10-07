@@ -361,5 +361,63 @@ body{padding-top:60px;}
 
 /* Placement: right */
 [data-tip-pos="right"]::before{bottom:auto;top:50%;left:calc(100% + 8px);transform:translateY(-50%) translateX(-4px);}
-[data-tip-pos="right"]::after{bottom:auto;top:50%;left:calc(100% + 2px);border-top-color:transparent;border-right-color:#252525;transform:translateY(-50%) translateX(-4px);}
+[data-tip-pos="right"]:after{bottom:auto;top:50%;left:calc(100% + 2px);border-top-color:transparent;border-right-color:#252525;transform:translateY(-50%) translateX(-4px);}
 [data-tip-pos="right"]:hover::before,[data-tip-pos="right"]:hover::after{transform:translateY(-50%) translateX(0);}
+
+/* ── Minimal 3-dots card menu ── */
+.card-dots-wrap{position:relative;display:inline-flex;align-items:center;}
+.card-dots-btn{
+  height:32px;width:32px;padding:0;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1.5px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text2);cursor:pointer;
+  transition:border-color .2s,color .2s,background .2s;
+}
+.card-dots-btn:hover{border-color:var(--border-hi);color:var(--text);background:rgba(255,255,255,.04);}
+.card-dots-btn svg{width:14px;height:14px;fill:currentColor;}
+
+.card-dots-menu{
+  position:absolute;bottom:calc(100% + 6px);right:0;z-index:100;
+  background:#111;border:1.5px solid var(--border-hi);border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.85);padding:5px;
+  min-width:140px;display:none;flex-direction:column;gap:3px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+}
+.card-dots-menu.open{display:flex;}
+.card-dots-item{
+  display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;
+  border:none;border-radius:6px;background:transparent;
+  color:#bbb;font-size:.76rem;font-weight:600;cursor:pointer;
+  text-align:left;transition:background .15s,color .15s;
+}
+.card-dots-item:hover{background:rgba(255,255,255,.08);color:#fff;}
+.card-dots-item.danger{color:#ef4444;}
+.card-dots-item.danger:hover{background:rgba(239,68,68,.15);color:#ff6b6b;}
+.card-dots-item svg{width:13px;height:13px;stroke:currentColor;fill:none;flex-shrink:0;}
+
+/* ── Album Floating Selection Toolbar ── */
+.alb-selection-bar{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(90px);
+  z-index:9500;display:flex;align-items:center;gap:12px;
+  background:rgba(14,14,14,.95);border:1.5px solid var(--border-hi);
+  padding:10px 18px;border-radius:50px;
+  box-shadow:0 16px 48px rgba(0,0,0,.85);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:transform .24s cubic-bezier(.16,1,.3,1),opacity .2s;
+  opacity:0;pointer-events:none;
+}
+.alb-selection-bar.visible{
+  transform:translateX(-50%) translateY(0);
+  opacity:1;pointer-events:auto;
+}
+.alb-sel-count{font-size:.82rem;font-weight:700;color:var(--text);white-space:nowrap;}
+.alb-sel-btn{
+  height:32px;padding:0 14px;border-radius:50px;
+  border:none;font-size:.76rem;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:opacity .15s,transform .15s;
+}
+.alb-sel-btn:active{transform:scale(.97);}
+.alb-sel-btn.danger{background:#dc2626;color:#fff;}
+.alb-sel-btn.danger:hover{background:#ef4444;}
+.alb-sel-btn.secondary{background:rgba(255,255,255,.08);color:var(--text2);border:1.5px solid var(--border);}
+.alb-sel-btn.secondary:hover{border-color:var(--border-hi);color:var(--text);}
