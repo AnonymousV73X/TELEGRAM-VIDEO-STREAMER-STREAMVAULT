@@ -1185,7 +1185,7 @@ def _render_album(album, videos, meta=None, poster_sm_url="", lqip=""):
         + f"""<script>
 window._VDATA = [];
 function openVLC(id,btn){{
-  if(btn){{btn.disabled=true;btn.dataset.origHtml=btn.innerHTML;btn.innerHTML='<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>&nbsp;Preparing\u2026';}}
+  if(btn){{btn.disabled=true;btn.dataset.origHtml=btn.innerHTML;btn.innerHTML='<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';}}
   fetch('/api/history/record',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{message_id:id}})}}).catch(function(){{}});
   fetch('/api/launch_vlc',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{msg_id:id}})}})
     .then(function(r){{return r.json();}})
