@@ -1212,64 +1212,97 @@ function copyUrl(url,btn){{
     setTimeout(function(){{btn.innerHTML=orig;}},1500);
   }}).catch(function(){{}});
 }}
-function openSubChooser(id, btn){{
-  if(btn){{btn.dataset.origHtml=btn.innerHTML;btn.innerHTML='<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';}}
+function openSubChooser(id, btn, customQuery, customLang){{
+  var currentQuery = customQuery !== undefined ? customQuery : '';
+  var currentLang = customLang || 'EN';
+
+  if(btn && !customQuery && customLang === undefined){{
+    btn.dataset.origHtml=btn.innerHTML;
+    btn.innerHTML='<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+  }}
+
   openModal('<div style="text-align:center;padding:28px 0;"><svg class="sv-spin-ico" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg><div style="margin-top:14px;font-size:.85rem;font-weight:600;color:#ccc">Scanning channel & online subtitles...</div></div>');
 
   fetch('/api/subtitles/list',{{
     method:'POST',
     headers:{{'Content-Type':'application/json'}},
-    body:JSON.stringify({{msg_id:id}})
+    body:JSON.stringify({{msg_id:id, search_query: currentQuery, lang: currentLang}})
   }})
   .then(function(r){{return r.json();}})
   .then(function(d){{
     if(btn){{btn.innerHTML=btn.dataset.origHtml;}}
-    if(!d.ok||!d.options||d.options.length===0){{
-      openModal('<h3 style="font-size:1rem;font-weight:700;margin-bottom:8px;color:#e8e8e8">No Subtitles Found</h3><p style="font-size:.8rem;color:#888;margin-bottom:20px;line-height:1.4">No matching subtitle files were found in the channel or online database for this video.</p><div style="text-align:right"><button class="sub-modal-select-btn" onclick="closeModal()">Close</button></div>');
-      return;
-    }}
+    
     var html = '<h3 style="font-size:1.05rem;font-weight:700;color:#e8e8e8;margin-bottom:4px">Select Subtitle</h3>';
-    html += '<div style="font-size:.76rem;color:#888;margin-bottom:14px;word-break:break-word">'+(d.title||d.filename||'')+'</div>';
-    html += '<div class="sub-modal-list">';
-    d.options.forEach(function(opt, idx){{
-      var isTg = opt.source === 'telegram';
-      var isSubdl = opt.source === 'subdl';
-      var isSubSource = opt.source === 'subsource';
-      var tagClass = isTg ? 'tg' : (isSubdl ? 'subdl' : (isSubSource ? 'subsource' : 'yify'));
-      var tagLabel = isTg ? 'Telegram Channel' : (isSubdl ? 'Subdl (' + (opt.language || 'EN') + (opt.hi ? ' SDH' : '') + ')' : (isSubSource ? 'SubSource (' + (opt.language || 'EN') + (opt.hi ? ' SDH' : '') + ')' : 'Yify Online'));
-      var scoreLabel = opt.score > 0 ? (Math.round(Math.min(100, opt.score)) + '% Match') : '';
-      var subIdStr = (opt.id !== null && opt.id !== undefined) ? opt.id : 'null';
-      var optUrl = opt.url || '';
-      var isActive = opt.is_active || false;
-      var itemId = 'sub_opt_' + (opt.id || opt.source || 'opt') + '_' + idx;
-      var itemClass = 'sub-modal-item' + (isActive ? ' active' : '');
-      html += '<div class="' + itemClass + '" id="' + itemId + '">';
-      html += '  <div style="flex:1;min-width:0">';
-      html += '    <div class="sub-modal-item-title">' + (isActive ? '<span style="color:#22c55e;margin-right:6px;font-weight:700;">&#10003;</span>' : '') + opt.filename + '</div>';
-      html += '    <div class="sub-modal-item-meta">';
-      html += '      <span class="sub-modal-tag ' + tagClass + '">' + tagLabel + '</span>';
-      if(isActive) html += '      <span class="sub-modal-tag active-tag" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);">ACTIVE</span>';
-      if(scoreLabel && isTg) html += '      <span class="sub-modal-tag match">' + scoreLabel + '</span>';
-      if(opt.ext) html += '      <span style="text-transform:uppercase;color:#555">.' + opt.ext + '</span>';
-      html += '    </div>';
-      html += '  </div>';
-      if(isActive) {{
-        html += '  <button class="sub-modal-select-btn active" disabled>Active</button>';
-      }} else {{
-        html += '  <button class="sub-modal-select-btn sub-apply-btn"'
-              + ' data-mid="' + id + '"'
-              + ' data-sid="' + subIdStr + '"'
-              + ' data-fn="' + encodeURIComponent(opt.filename) + '"'
-              + ' data-src="' + encodeURIComponent(opt.source) + '"'
-              + ' data-url="' + encodeURIComponent(optUrl) + '"'
-              + '>Use This Subtitle</button>';
-      }}
-      html += '</div>';
-    }});
+    html += '<div style="font-size:.76rem;color:#888;margin-bottom:12px;word-break:break-word">'+(d.title||d.filename||'')+'</div>';
+    
+    // Custom Search Control Bar
+    html += '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">';
+    html += '  <input type="text" id="sub_search_input" value="' + (currentQuery ? currentQuery.replace(/"/g, '&quot;') : '') + '" placeholder="Custom search title (e.g. Inception 2010)" style="flex:1;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:6px 10px;color:#fff;font-size:.8rem;outline:none;" />';
+    html += '  <button id="sub_search_btn" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;">Search</button>';
     html += '</div>';
-    openModal(html);
-    // Wire up buttons via event delegation — avoids inline onclick quoting
+
+    if(!d.ok||!d.options||d.options.length===0){{
+      html += '<div style="text-align:center;padding:20px 0;"><p style="font-size:.8rem;color:#888;margin-bottom:16px;">No matching subtitle files were found.</p></div>';
+      html += '<div style="text-align:right"><button class="sub-modal-select-btn" onclick="closeModal()">Close</button></div>';
+      openModal(html);
+    }} else {{
+      html += '<div class="sub-modal-list">';
+      d.options.forEach(function(opt, idx){{
+        var isTg = opt.source === 'telegram';
+        var isSubdl = opt.source === 'subdl';
+        var isSubSource = opt.source === 'subsource';
+        var tagClass = isTg ? 'tg' : (isSubdl ? 'subdl' : 'subsource');
+        var tagLabel = isTg ? 'Telegram Channel' : (isSubdl ? 'Subdl (' + (opt.language || 'EN') + (opt.hi ? ' SDH' : '') + ')' : 'SubSource (' + (opt.language || 'EN') + (opt.hi ? ' SDH' : '') + ')');
+        var scoreLabel = opt.score > 0 ? (Math.round(Math.min(100, opt.score)) + '% Match') : '';
+        var subIdStr = (opt.id !== null && opt.id !== undefined) ? opt.id : 'null';
+        var optUrl = opt.url || '';
+        var isActive = opt.is_active || false;
+        var itemId = 'sub_opt_' + (opt.id || opt.source || 'opt') + '_' + idx;
+        var itemClass = 'sub-modal-item' + (isActive ? ' active' : '');
+        html += '<div class="' + itemClass + '" id="' + itemId + '">';
+        html += '  <div style="flex:1;min-width:0">';
+        html += '    <div class="sub-modal-item-title">' + (isActive ? '<span style="color:#22c55e;margin-right:6px;font-weight:700;">&#10003;</span>' : '') + opt.filename + '</div>';
+        html += '    <div class="sub-modal-item-meta">';
+        html += '      <span class="sub-modal-tag ' + tagClass + '">' + tagLabel + '</span>';
+        var epBadge = (opt.season != null && opt.episode != null) ? ('<span class="sub-modal-tag" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);font-weight:600;">S' + (opt.season<10?'0':'') + opt.season + 'E' + (opt.episode<10?'0':'') + opt.episode + '</span>') : (opt.season != null ? ('<span class="sub-modal-tag" style="background:rgba(59,130,246,.15);color:#60a5fa;border:1px solid rgba(59,130,246,.3);">Season '+opt.season+'</span>') : '');
+        if(epBadge) html += epBadge;
+        if(isActive) html += '      <span class="sub-modal-tag active-tag" style="background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);">ACTIVE</span>';
+        if(scoreLabel && isTg) html += '      <span class="sub-modal-tag match">' + scoreLabel + '</span>';
+        if(opt.ext) html += '      <span style="text-transform:uppercase;color:#555">.' + opt.ext + '</span>';
+        html += '    </div>';
+        html += '  </div>';
+        if(isActive) {{
+          html += '  <button class="sub-modal-select-btn active" disabled>Active</button>';
+        }} else {{
+          html += '  <button class="sub-modal-select-btn sub-apply-btn"'
+                + ' data-mid="' + id + '"'
+                + ' data-sid="' + subIdStr + '"'
+                + ' data-fn="' + encodeURIComponent(opt.filename) + '"'
+                + ' data-src="' + encodeURIComponent(opt.source) + '"'
+                + ' data-url="' + encodeURIComponent(optUrl) + '"'
+                + '>Use This Subtitle</button>';
+        }}
+        html += '</div>';
+      }});
+      html += '</div>';
+      openModal(html);
+    }}
+
+    // Bind search button and input enter key
     setTimeout(function(){{
+      var sBtn = document.getElementById('sub_search_btn');
+      var sInp = document.getElementById('sub_search_input');
+      function doSearch(){{
+        var q = sInp ? sInp.value : '';
+        openSubChooser(id, null, q, 'EN');
+      }}
+      if(sBtn){{ sBtn.addEventListener('click', doSearch); }}
+      if(sInp){{
+        sInp.addEventListener('keydown', function(e){{
+          if(e.key === 'Enter') doSearch();
+        }});
+      }}
+
       document.querySelectorAll('.sub-apply-btn').forEach(function(b){{
         b.addEventListener('click', function(){{
           var mid = parseInt(this.dataset.mid);
@@ -1335,6 +1368,293 @@ function _applySub(msgId, subMsgId, filename, source, url, btn){{
 
 function fetchSub(id,btn){{
   openSubChooser(id, btn);
+}}
+
+// ── Download Manager ──────────────────────────────────────────────────────────
+var _svDlPanel = null, _svDlInterval = null, _svDlTracked = {{}};
+
+function _svDlFmt(bytes){{
+  if(!bytes) return '0 B';
+  var k=1024,m=k*k,g=m*k;
+  if(bytes>=g) return (bytes/g).toFixed(2)+' GB';
+  if(bytes>=m) return (bytes/m).toFixed(1)+' MB';
+  if(bytes>=k) return (bytes/k).toFixed(0)+' KB';
+  return bytes+' B';
+}}
+
+function _svDlEnsurePanel(){{
+  if(_svDlPanel) return;
+  var panel = document.createElement('div');
+  panel.id = 'sv-dl-panel';
+  panel.style.cssText = 'position:fixed;bottom:76px;right:20px;width:340px;max-height:420px;overflow-y:auto;background:var(--card,#1a1a2e);border:1.5px solid var(--border,rgba(255,255,255,.08));border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.6);z-index:9999;padding:14px 16px 12px;font-size:.82rem;color:var(--text,#e0e0e0);display:none;backdrop-filter:blur(10px);';
+  panel.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);">'
+    +'<span style="font-weight:700;font-size:.88rem;letter-spacing:.02em;">Downloads</span>'
+    +'<div style="display:flex;gap:6px;">'
+    +'<button onclick="_svDlClosePanel()" style="background:transparent;border:none;color:var(--text2,#999);font-size:1.2rem;cursor:pointer;padding:0 4px;line-height:1;" title="Close">&times;</button>'
+    +'</div></div>'
+    +'<div id="sv-dl-list"></div>';
+  document.body.appendChild(panel);
+  _svDlPanel = panel;
+}}
+
+function _svDlOpenPanel(){{
+  _svDlEnsurePanel();
+  _svDlPanel.style.display='block';
+  _svDlUpdateFabState(true);
+}}
+
+function _svDlClosePanel(){{
+  if(_svDlPanel) _svDlPanel.style.display='none';
+  _svDlUpdateFabState(false);
+}}
+
+function _svDlTogglePanel(){{
+  _svDlEnsurePanel();
+  var isOpen = (_svDlPanel.style.display !== 'none');
+  if(isOpen){{
+    _svDlClosePanel();
+  }} else {{
+    _svDlOpenPanel();
+  }}
+}}
+
+function _svDlUpdateFabState(isOpen){{
+  var fab = document.getElementById('sv-dl-fab');
+  if(!fab) return;
+  var icon = fab.querySelector('.sv-fab-icon');
+  if(!icon) return;
+  if(isOpen){{
+    icon.style.transform = 'rotate(45deg)';
+    fab.setAttribute('title', 'Close Downloads');
+  }} else {{
+    icon.style.transform = 'rotate(0deg)';
+    fab.setAttribute('title', 'Open Downloads');
+  }}
+}}
+
+function _svDlEnsureFab(){{
+  if(document.getElementById('sv-dl-fab')) return;
+  var fab = document.createElement('button');
+  fab.id = 'sv-dl-fab';
+  fab.title = 'Downloads';
+  fab.onclick = _svDlTogglePanel;
+  fab.style.cssText = 'display:none;position:fixed;bottom:20px;right:20px;width:48px;height:48px;border-radius:50%;background:var(--accent,#f5c518);border:none;color:#000;cursor:pointer;z-index:9998;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);transition:transform .2s ease,box-shadow .2s ease;';
+  fab.onmouseenter = function(){{ fab.style.transform = 'scale(1.06)'; }};
+  fab.onmouseleave = function(){{ fab.style.transform = 'scale(1)'; }};
+  fab.innerHTML = '<svg class="sv-fab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .25s cubic-bezier(.4,0,.2,1);"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+  document.body.appendChild(fab);
+}}
+
+function _svDlRenderItem(info){{
+  var id = info.msg_id;
+  var title = (info.title||'Video '+id);
+  if(title.length>38) title=title.slice(0,35)+'...';
+  var pct = Math.min(100,Math.round(info.percent||0));
+  var statusTxt, barColor, statusKey;
+  if(info.status==='error'){{
+    statusTxt='\u26a0 Failed'; barColor='#ef4444'; statusKey='error';
+  }} else {{
+    statusTxt=pct+'% \u2013 '+_svDlFmt(info.downloaded||0)+' / '+_svDlFmt(info.total||0);
+    barColor='var(--accent,#f5c518)'; statusKey='downloading';
+  }}
+  var html='<div data-dl-id="'+id+'" data-dl-status="'+statusKey+'" id="sv-dl-item-'+id+'" style="margin-bottom:12px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">'
+    +'<span style="font-size:.79rem;font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(info.title||'')+'">'+title+'</span>'
+    +'<span style="font-size:.73rem;color:var(--text2,#999);margin-left:8px;white-space:nowrap;">'+statusTxt+'</span>'
+    +'</div>'
+    +'<div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;">'
+    +'<div style="height:100%;width:'+pct+'%;background:'+barColor+';border-radius:3px;transition:width .3s ease;"></div>'
+    +'</div></div>';
+  var existing = document.getElementById('sv-dl-item-'+id);
+  if(existing) existing.outerHTML=html;
+  else{{
+    var list=document.getElementById('sv-dl-list');
+    if(list) list.insertAdjacentHTML('afterbegin',html);
+  }}
+}}
+
+function _svDlRemoveItem(id){{
+  var el = document.getElementById('sv-dl-item-' + id);
+  if(el){{
+    el.style.transition = 'opacity .3s, transform .3s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(20px)';
+    setTimeout(function(){{ if(el) el.remove(); }}, 300);
+  }}
+}}
+
+function _svDlStartPolling(){{
+  if(_svDlInterval) return;
+  _svDlEnsureFab();
+  _svDlInterval = setInterval(function(){{
+    fetch('/api/download/all')
+      .then(function(r){{ return r.json(); }})
+      .then(function(d){{
+        if(!d.ok||!d.downloads) return;
+        var active=0;
+        var hasCompleted=false;
+        d.downloads.forEach(function(info){{
+          var isDone = info.is_downloaded || info.status === 'completed';
+          if(isDone){{
+            hasCompleted = true;
+            _svDlRemoveItem(info.msg_id);
+            if(!_svDlTracked['done_'+info.msg_id]){{
+              _svDlTracked['done_'+info.msg_id]=true;
+              _setVideoDownloaded(info.msg_id, true);
+              _svShowVlcPill('\u2713 Download complete: ' + (info.title||'Video'), true);
+            }}
+          }} else if(info.status === 'downloading'){{
+            active++;
+            _svDlTracked[info.msg_id]=true;
+            _svDlRenderItem(info);
+          }} else if(info.status === 'error'){{
+            _svDlRenderItem(info);
+          }}
+        }});
+
+        if(hasCompleted){{
+          fetch('/api/download/clear_completed', {{method:'POST'}}).catch(function(){{}});
+        }}
+
+        var fab = document.getElementById('sv-dl-fab');
+        if(fab){{
+          fab.style.display = (active > 0) ? 'flex' : 'none';
+        }}
+
+        if(active === 0){{
+          clearInterval(_svDlInterval);
+          _svDlInterval = null;
+          // Auto close panel when all active downloads finish
+          setTimeout(function(){{
+            if(!active) _svDlClosePanel();
+          }}, 800);
+        }}
+      }})
+      .catch(function(){{}});
+  }}, 1000);
+}}
+
+function svStartDownload(id, btn){{
+  if(btn){{
+    btn.disabled=true;
+    btn.dataset.origHtml=btn.innerHTML;
+    btn.innerHTML='<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+    btn.title='Starting\u2026';
+  }}
+  fetch('/api/download/start',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{msg_id:id}})}})
+  .then(function(r){{ return r.json(); }})
+  .then(function(d){{
+    if(!d.ok){{
+      _svShowVlcPill('\u26a0 '+(d.error||'Failed to start download'),false);
+      if(btn){{ btn.disabled=false; btn.innerHTML=btn.dataset.origHtml; btn.title='Download Video'; }}
+      return;
+    }}
+    _svDlEnsurePanel();
+    _svDlOpenPanel();
+    _svDlStartPolling();
+  }})
+  .catch(function(){{
+    _svShowVlcPill('\u26a0 Network error',false);
+    if(btn){{ btn.disabled=false; btn.innerHTML=btn.dataset.origHtml; btn.title='Download Video'; }}
+  }});
+}}
+
+function _setVideoDownloaded(id, isDl){{
+  if(window._VDATA && Array.isArray(window._VDATA)){{
+    var it = window._VDATA.find(function(x){{ return x.id == id; }});
+    if(it) it.is_downloaded = isDl;
+  }}
+  if(window._videoById && window._videoById[id]){{
+    window._videoById[id].is_downloaded = isDl;
+  }}
+  if(window._rerenderCard){{
+    window._rerenderCard(id);
+  }} else {{
+    if(window._clearCardHtmlCache) window._clearCardHtmlCache(id);
+    _updateCardDlButtons(id, isDl);
+  }}
+}}
+
+function _updateCardDlButtons(id, isDl){{
+  var card = document.querySelector('[data-mid="' + id + '"]');
+  if(!card) return;
+  var row = card.querySelector('.play-btn-row');
+  if(!row) return;
+
+  var playBtn = row.querySelector('.play-btn');
+  if(playBtn){{
+    playBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="11" height="11"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>' + (isDl ? 'Play' : 'Play in VLC');
+  }}
+
+  var copyBtn = row.querySelector('.copy-btn');
+  if(copyBtn){{
+    copyBtn.style.display = isDl ? 'none' : '';
+  }}
+
+  var oldDl = row.querySelector('.dl-btn');
+  var oldDel = row.querySelector('.del-btn');
+  if(oldDl) oldDl.remove();
+  if(oldDel) oldDel.remove();
+
+  if(isDl){{
+    var dlBtn = document.createElement('button');
+    dlBtn.className = 'play-btn-copy dl-btn downloaded';
+    dlBtn.id = 'dl-btn-' + id;
+    dlBtn.title = 'Downloaded (Offline ready)';
+    dlBtn.style.cssText = 'border-color:#22c55e;color:#22c55e;cursor:default;';
+    dlBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>';
+    dlBtn.onclick = function(e){{ e.stopPropagation(); }};
+
+    var delBtn = document.createElement('button');
+    delBtn.className = 'play-btn-copy del-btn';
+    delBtn.id = 'del-btn-' + id;
+    delBtn.title = 'Delete downloaded video (free storage)';
+    delBtn.style.cssText = 'border-color:rgba(239,68,68,.4);color:#ef4444;';
+    delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+    delBtn.onclick = function(e){{ e.stopPropagation(); svDeleteDownload(id, delBtn); }};
+
+    row.appendChild(dlBtn);
+    row.appendChild(delBtn);
+  }} else {{
+    var newDl = document.createElement('button');
+    newDl.className = 'play-btn-copy dl-btn';
+    newDl.id = 'dl-btn-' + id;
+    newDl.title = 'Download Video';
+    newDl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    newDl.onclick = function(e){{ e.stopPropagation(); svStartDownload(id, newDl); }};
+    row.appendChild(newDl);
+  }}
+}}
+
+function svDeleteDownload(id, btn){{
+  _svAlert({{
+    title: 'Delete Downloaded Video',
+    body: 'Permanently remove the local offline video file to free up storage space? (You can re-download anytime)',
+    confirmText: 'Delete',
+    danger: true,
+    onConfirm: function(){{
+      if(btn){{ btn.disabled = true; }}
+      fetch('/api/download/delete', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{msg_id: id}})
+      }})
+      .then(function(r){{ return r.json(); }})
+      .then(function(d){{
+        if(d.ok){{
+          _setVideoDownloaded(id, false);
+          _svShowVlcPill('Deleted offline file. Storage freed.', true);
+        }} else {{
+          if(btn) btn.disabled = false;
+          _svShowVlcPill('\u26a0 ' + (d.error || 'Failed to delete file'), false);
+        }}
+      }})
+      .catch(function(){{
+        if(btn) btn.disabled = false;
+        _svShowVlcPill('\u26a0 Network error deleting file', false);
+      }});
+    }}
+  }});
 }}
 (function(){{
   fetch('/api/album_data/{encoded_album}')

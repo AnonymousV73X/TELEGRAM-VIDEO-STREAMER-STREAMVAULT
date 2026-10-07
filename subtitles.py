@@ -28,10 +28,13 @@ import asyncio
 import re
 import sqlite3
 import time
+import uuid
+import hashlib
 import zipfile
 import tarfile
 import shutil
 import subprocess
+import sys
 import tempfile
 import io
 import difflib
@@ -39,10 +42,64 @@ import aiohttp
 import config as _cfg
 from telethon.tl.types import MessageMediaDocument, DocumentAttributeFilename
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
+# ── Paths & Safe File Handling ────────────────────────────────────────────────
 _here = os.path.dirname(os.path.abspath(__file__))
 SUB_DIR = os.path.join(_here, ".cache", "subtitles")
+OPTIONS_DIR = os.path.join(SUB_DIR, "options")
 os.makedirs(SUB_DIR, exist_ok=True)
+os.makedirs(OPTIONS_DIR, exist_ok=True)
+
+# In-memory search results cache: (msg_id, query_title, lang) -> (timestamp, data_dict)
+_SUB_SEARCH_CACHE: dict[tuple, tuple[float, dict]] = {}
+_SEARCH_CACHE_TTL = 900  # 15 minutes TTL
+
+def _get_option_cache_path(source: str, sub_id: str | int, url: str, filename: str) -> str:
+    """Generate a persistent content-addressed filepath for downloaded subtitle options."""
+    raw = f"{source}_{sub_id}_{url}_{filename}"
+    h = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    clean_fn = re.sub(r"[^\w\-.]", "_", os.path.basename(filename))[:40]
+    return os.path.join(OPTIONS_DIR, f"{source}_{h}_{clean_fn}.srt")
+
+def _make_temp_sub_path(msg_id: int) -> str:
+    """Generate a unique temporary filepath to avoid file locking collisions between concurrent tasks."""
+    return os.path.join(SUB_DIR, f"{msg_id}_{uuid.uuid4().hex[:8]}.tmp")
+
+def _safe_remove(path: str | None):
+    """Safely remove a temporary file without raising errors on Windows locks."""
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+def _safe_save_subtitle(msg_id: int, content: str | bytes) -> str:
+    """Save subtitle content to cache safely, handling Windows file locks gracefully."""
+    cache_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
+    is_bytes = isinstance(content, (bytes, bytearray))
+    mode = "wb" if is_bytes else "w"
+    kwargs = {} if is_bytes else {"encoding": "utf-8"}
+
+    # 1. Try direct write to standard cache_path (with retry if player temporarily locks it)
+    for attempt in range(3):
+        try:
+            with open(cache_path, mode, **kwargs) as f:
+                f.write(content)
+            return cache_path
+        except (PermissionError, OSError):
+            time.sleep(0.1)
+
+    # 2. Fallback: if standard cache_path is locked by active player (VLC / Windows file lock),
+    # write to a unique versioned file and return it.
+    versioned_path = os.path.join(SUB_DIR, f"{msg_id}_{int(time.time() * 1000)}_en.srt")
+    try:
+        with open(versioned_path, mode, **kwargs) as f:
+            f.write(content)
+        return versioned_path
+    except Exception as e:
+        print(f"[subtitles] Failed to write fallback subtitle: {e}")
+        return cache_path
 
 _INDEX_DB = os.path.join(_here, ".cache", "subtitle_index.db")
 _SUBTITLE_EXTS = {".srt", ".vtt", ".ass", ".sub", ".zip", ".rar", ".7z", ".tar", ".gz"}
@@ -150,6 +207,11 @@ def extract_season_episode(text: str) -> tuple[int | None, int | None]:
 
     # Normalize delimiters for word boundary matching
     norm = re.sub(r"[._\-+\[\]()]", " ", path_norm)
+    # Strip codec/tech noise that produces false episode matches (e.g. x264→E264, H.264→E264)
+    # Must handle both "x264" (no space) and "H 264" (space after delimiter normalization)
+    norm = re.sub(r"(?i)\b[hx]\s*26[0-9]\b", "", norm)   # x264, x265, h264, h265, H 264, H 265
+    norm = re.sub(r"(?i)\b(xvid|divx|hevc|avc|avc1|av1|vp9|hdr|dts|dd\s*\d|ddp\s*\d|atmos|truehd|flac|aac|mp3|ac3|eac3)\b", "", norm)
+    norm = re.sub(r"\b\d+p\b", "", norm)  # 720p 1080p 2160p etc.
 
     # 2. Standard S01E04, S1 E4, S01  E04
     m = re.search(r"(?i)\bS(\d{1,2})\s*E(\d{1,3})\b", norm)
@@ -185,7 +247,7 @@ def extract_season_episode(text: str) -> tuple[int | None, int | None]:
     m = re.search(r"\b([1-9])(\d{2})\b", norm)
     if m:
         num = int(m.group(0))
-        if num not in {720, 480, 576, 360, 240, 108} and not (1900 <= num <= 2099):
+        if num not in {720, 480, 576, 360, 240, 108, 264, 265} and not (1900 <= num <= 2099):
             return int(m.group(1)), int(m.group(2))
 
     # 9. Bracketed or isolated episode number: "[07]", "(07)", "^07.srt", "07 - Title.srt"
@@ -253,9 +315,10 @@ def calculate_match_score(
     clean_show_nospace = re.sub(r"\s+", "", clean_show)
     sub_nospace = re.sub(r"[^\w]", "", s_clean)
 
+    # Allow partial show match if title tokens overlap significantly
     has_title_match = (
         bool(show_overlap)
-        or (len(clean_show_nospace) >= 4 and (
+        or (len(clean_show_nospace) >= 3 and (
             clean_show_nospace in sub_nospace or sub_nospace.startswith(clean_show_nospace)
         ))
     )
@@ -273,29 +336,29 @@ def calculate_match_score(
         if s_e is not None:
             if v_e != s_e:
                 return -1000.0          # Wrong episode — hard reject
-            score += 60.0               # Exact episode match
+            score += 70.0               # Exact episode match
             if v_s is not None and s_s is not None:
                 if v_s != s_s:
                     return -1000.0      # Wrong season — hard reject
-                score += 40.0           # Exact season + episode match
+                score += 50.0           # Exact season + episode match
         elif is_archive:
             # It's a season/series pack archive — great candidate for extraction
             if v_s is not None and s_s is not None:
                 if v_s != s_s:
                     return -1000.0      # Wrong season pack
-                score += 70.0           # Correct season pack — very high reward
+                score += 80.0           # Correct season pack — very high reward
             else:
-                score += 55.0           # Complete series pack (season unknown in sub name)
+                score += 60.0           # Complete series pack (season unknown in sub name)
         else:
             score -= 10.0               # No ep tag in sub name (non-archive)
     elif s_e is not None:
-        score -= 20.0                   # Sub has episode tag, video doesn't
+        score -= 15.0                   # Sub has episode tag, video doesn't
 
     # 2. Keyword / token overlap (Jaccard + title-subset ratio)
     if v_tok and s_tok:
         jaccard = len(total_overlap) / max(len(v_tok | s_tok), 1)
         score += jaccard * 40.0
-        score += (len(show_overlap) / max(len(show_toks), 1)) * 30.0
+        score += (len(show_overlap) / max(len(show_toks), 1)) * 40.0
 
     # 3. String similarity (SequenceMatcher)
     sim = difflib.SequenceMatcher(
@@ -303,7 +366,7 @@ def calculate_match_score(
         " ".join(sorted(v_tok)),
         " ".join(sorted(s_tok)),
     ).ratio()
-    score += sim * 20.0
+    score += sim * 25.0
 
     # 4. Proximity tie-breaker (max +10 for adjacent messages)
     score += max(0.0, 10.0 - distance * 0.001)
@@ -501,8 +564,16 @@ async def search_subdl(
         params["imdb_id"] = imdb_id
     elif tmdb_id:
         params["tmdb_id"] = str(tmdb_id)
-    elif title:
-        params["film_name"] = title
+
+    # Always prepare clean title for fallback or direct search
+    clean_title = re.sub(
+        r"(?i)\b(s\d{1,2}e\d{1,2}|s\d{1,2}|season\s*\d+|e\d{1,2}|ep\s*\d+|\d+x\d+)\b.*",
+        "", title
+    ).strip()
+    clean_title = re.sub(r"\s*\(\d{4}\)\s*$", "", clean_title).strip()
+
+    if "imdb_id" not in params and "tmdb_id" not in params and clean_title:
+        params["film_name"] = clean_title or title
 
     if season is not None:
         params["season_number"] = str(season)
@@ -530,6 +601,42 @@ async def search_subdl(
             return []
 
         raw_subs = data.get("subtitles", [])
+
+        # If searching by title and no subtitles or to check for better title variant (e.g. '&' vs 'and')
+        if (not raw_subs or "&" in title or " and " in title.lower()) and clean_title:
+            variants = []
+            if "&" in clean_title:
+                variants.append(clean_title.replace("&", "and"))
+            elif " and " in clean_title.lower():
+                variants.append(re.sub(r"(?i)\band\b", "&", clean_title))
+
+            for v in variants:
+                fb_params = {
+                    "api_key": api_key,
+                    "languages": languages,
+                    "subs_per_page": 30,
+                    "film_name": v,
+                }
+                if season is not None:
+                    fb_params["season_number"] = str(season)
+                    fb_params["type"] = "tv"
+                if episode is not None:
+                    fb_params["episode_number"] = str(episode)
+                try:
+                    async with aiohttp.ClientSession() as sess:
+                        async with sess.get(_SUBDL_SEARCH_URL, params=fb_params, headers=headers, timeout=10) as resp:
+                            if resp.status == 200:
+                                fb_data = await resp.json(content_type=None)
+                                if fb_data.get("status"):
+                                    more_subs = fb_data.get("subtitles", [])
+                                    if more_subs:
+                                        seen_urls = {s.get("url") for s in raw_subs}
+                                        for ms in more_subs:
+                                            if ms.get("url") not in seen_urls:
+                                                raw_subs.append(ms)
+                except Exception as fe:
+                    print(f"[subdl] Variant search error for '{v}': {fe}")
+
         results = []
         for sub in raw_subs:
             url_path = sub.get("url", "")
@@ -574,8 +681,7 @@ async def download_subdl_option(
     - Raw .srt files -> normalise and cache directly.
     - .zip files     -> extract best matching .srt using the existing archive logic.
     """
-    cache_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
-    temp_path  = cache_path + ".tmp"
+    temp_path = _make_temp_sub_path(msg_id)
 
     headers = {"User-Agent": "StreamVault/1.0"}
     api_key = _cfg.SUBDL_API_KEY
@@ -608,39 +714,44 @@ async def download_subdl_option(
                         chosen_name = None
                         norm_text = None
 
-                        # 1. Try matching by chosen release / card filename
-                        if filename:
-                            chosen_name, norm_text = _find_best_file_in_archive_tree(
-                                sub_files, extract_dir, filename, filename
-                            )
+                        # 1. Primary: Match by target video title & filename (which contains S01E03)
+                        chosen_name, norm_text = _find_best_file_in_archive_tree(
+                            sub_files, extract_dir, target_title, target_filename
+                        )
 
-                        # 2. Try matching by target video title & filename
+                        # 2. Secondary: Try matching using card release name as title & filename hint
                         if not chosen_name or not norm_text:
-                            chosen_name, norm_text = _find_best_file_in_archive_tree(
-                                sub_files, extract_dir, target_title, target_filename
-                            )
+                            if filename:
+                                chosen_name, norm_text = _find_best_file_in_archive_tree(
+                                    sub_files, extract_dir, filename, filename + ".srt"
+                                )
 
-                        # 3. Fallback: take largest / most complete subtitle file in archive
+                        # 3. Fallback: prefer English-named, then take largest subtitle
                         if not chosen_name or not norm_text:
                             valid_subs = [p for p in sub_files if p.lower().endswith((".srt", ".vtt", ".ass"))]
                             if valid_subs:
-                                valid_subs.sort(key=lambda p: os.path.getsize(p) if os.path.exists(p) else 0, reverse=True)
-                                best_p = valid_subs[0]
+                                eng = [p for p in valid_subs if any(
+                                    w in os.path.basename(p).lower() for w in ("english", "eng", ".en.")
+                                )]
+                                pick_list = eng if eng else valid_subs
+                                pick_list.sort(key=lambda p: os.path.getsize(p) if os.path.exists(p) else 0, reverse=True)
+                                best_p = pick_list[0]
                                 chosen_name = os.path.relpath(best_p, extract_dir).replace("\\", "/")
                                 with open(best_p, "rb") as f:
                                     norm_text = _normalize_subtitle_text(f.read(), best_p)
 
                         if chosen_name and norm_text:
                             print(f"[subdl] Extracted '{chosen_name}' from '{filename}'")
-                            with open(cache_path, "w", encoding="utf-8") as f:
-                                f.write(norm_text)
-                            os.remove(temp_path)
-                            return cache_path
+                            try:
+                                opt_cache_file = _get_option_cache_path("subdl", url, url, filename)
+                                with open(opt_cache_file, "w", encoding="utf-8") as of:
+                                    of.write(norm_text)
+                            except Exception:
+                                pass
+                            return _safe_save_subtitle(msg_id, norm_text)
                     print(f"[subdl] No subtitle found in zip '{filename}'")
             except Exception as ze:
                 print(f"[subdl] Zip extract error for '{filename}': {ze}")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
             return None
 
         else:
@@ -648,17 +759,20 @@ async def download_subdl_option(
             with open(temp_path, "rb") as f:
                 raw = f.read()
             norm_text = _normalize_subtitle_text(raw, filename)
-            with open(cache_path, "w", encoding="utf-8") as f:
-                f.write(norm_text)
-            os.remove(temp_path)
+            try:
+                opt_cache_file = _get_option_cache_path("subdl", url, url, filename)
+                with open(opt_cache_file, "w", encoding="utf-8") as of:
+                    of.write(norm_text)
+            except Exception:
+                pass
             print(f"[subdl] Cached subtitle '{filename}' for msg_id={msg_id}")
-            return cache_path
+            return _safe_save_subtitle(msg_id, norm_text)
 
     except Exception as e:
         print(f"[subdl] Download error for '{filename}': {e}")
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return None
+    finally:
+        _safe_remove(temp_path)
 
 
 # ── SubSource online search + download ────────────────────────────────────────
@@ -684,42 +798,144 @@ async def search_subsource(
 
     try:
         async with aiohttp.ClientSession() as sess:
-            movie_id = None
+            movie_ids = []  # collect all candidate movieIds
 
-            # 1. Look up movie ID by IMDb ID or Text query
+            # 1. Look up movie ID by IMDb ID
             if imdb_id and imdb_id.startswith("tt"):
-                search_url = f"{_SUBSOURCE_BASE}/movies/search?searchType=imdb&imdb={imdb_id}"
-                async with sess.get(search_url, headers=headers, timeout=10) as resp:
+                # Use params= so aiohttp URL-encodes everything correctly
+                async with sess.get(
+                    f"{_SUBSOURCE_BASE}/movies/search",
+                    params={"searchType": "imdb", "imdb": imdb_id},
+                    headers=headers, timeout=10,
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         items = data.get("data", [])
                         if items and isinstance(items, list):
-                            movie_id = items[0].get("movieId") or items[0].get("id")
-            
-            if not movie_id and title:
-                # Clean title
-                clean_q = re.sub(r"(?i)\b(s\d+e\d+|s\d+|season\s*\d+|e\d+|ep\s*\d+|\d+x\d+)\b.*", "", title).strip()
-                search_url = f"{_SUBSOURCE_BASE}/movies/search?searchType=text&q={clean_q or title}"
-                async with sess.get(search_url, headers=headers, timeout=10) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        items = data.get("data", [])
-                        if items and isinstance(items, list):
-                            movie_id = items[0].get("movieId") or items[0].get("id")
+                            for item in items:
+                                mid = item.get("movieId") or item.get("id")
+                                if mid:
+                                    item_season = item.get("season")
+                                    if season is not None and item_season is not None:
+                                        if item_season == season:
+                                            movie_ids.insert(0, mid)
+                                        else:
+                                            movie_ids.append(mid)
+                                    else:
+                                        movie_ids.append(mid)
 
-            if not movie_id:
+            if not movie_ids and title:
+                # Strip SxxExx codes from title before text search
+                clean_q = re.sub(
+                    r"(?i)\b(s\d+e\d+|s\d+|season\s*\d+|e\d+|ep\s*\d+|\d+x\d+)\b.*",
+                    "", title
+                ).strip() or title
+                clean_q = re.sub(r"\s*\(\d{4}\)\s*$", "", clean_q).strip()
+
+                # Generate title search queries (original + '&'/'and' variants)
+                search_queries = [clean_q]
+                if "&" in clean_q:
+                    search_queries.append(clean_q.replace("&", "and"))
+                elif " and " in clean_q.lower():
+                    search_queries.append(re.sub(r"(?i)\band\b", "&", clean_q))
+
+                found_items = []
+                for sq in search_queries:
+                    async with sess.get(
+                        f"{_SUBSOURCE_BASE}/movies/search",
+                        params={"searchType": "text", "q": sq},
+                        headers=headers, timeout=10,
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            items = data.get("data", [])
+                            if items and isinstance(items, list):
+                                found_items.extend(items)
+                                if items:
+                                    break
+
+                if found_items:
+                    # Pick best-matching title across all results
+                    clean_norm = re.sub(r"[^\w\s]", "", clean_q.lower().replace("&", "and")).strip()
+                    best_score = -1
+                    best_title = None
+                    for item in found_items:
+                        t = (item.get("title") or "").lower()
+                        alt = (item.get("alternateTitle") or "").lower()
+                        t_norm = re.sub(r"[^\w\s]", "", t.replace("&", "and")).strip()
+                        alt_norm = re.sub(r"[^\w\s]", "", alt.replace("&", "and")).strip()
+
+                        score = 0
+                        if t_norm == clean_norm or alt_norm == clean_norm:
+                            score = 100
+                        elif t_norm.startswith(clean_norm) or clean_norm.startswith(t_norm):
+                            score = 80
+                        elif clean_norm in t_norm or clean_norm in alt_norm:
+                            score = 60
+                        else:
+                            q_words = set(re.split(r"\W+", clean_norm))
+                            t_words = set(re.split(r"\W+", t_norm))
+                            score = len(q_words & t_words) * 10
+                        if score > best_score:
+                            best_score = score
+                            best_title = t
+
+                    # Collect ALL movieIds matching the best title (all season entries)
+                    seen_mids = set()
+                    for item in found_items:
+                        t = (item.get("title") or "").lower()
+                        alt = (item.get("alternateTitle") or "").lower()
+                        if t == best_title or alt == best_title:
+                            mid = item.get("movieId") or item.get("id")
+                            if mid and mid not in seen_mids:
+                                seen_mids.add(mid)
+                                item_season = item.get("season")
+                                if season is not None and item_season is not None:
+                                    if item_season == season:
+                                        movie_ids.insert(0, mid)
+                                    else:
+                                        movie_ids.append(mid)
+                                else:
+                                    movie_ids.append(mid)
+
+            if not movie_ids:
                 return []
 
-            # 2. Fetch subtitles for this movie/show
-            lang_param = languages.lower() if languages else "english"
-            subs_url = f"{_SUBSOURCE_BASE}/subtitles?movieId={movie_id}&language={lang_param}&limit=30"
-            async with sess.get(subs_url, headers=headers, timeout=10) as resp:
-                if resp.status != 200:
-                    return []
-                subs_data = await resp.json()
+            # 2. Fetch subtitles from all candidate movieIds and merge
+            _LANG_MAP = {
+                "en": "english",
+                "es": "spanish",
+                "fr": "french",
+                "de": "german",
+                "it": "italian",
+                "pt": "portuguese",
+                "ru": "russian",
+                "ar": "arabic",
+                "tr": "turkish",
+                "sv": "swedish",
+            }
+            raw_lang = (languages or "english").strip().lower()
+            lang_param = _LANG_MAP.get(raw_lang, raw_lang)
+
+            all_subs_data: list[dict] = []
+            seen_sub_ids: set = set()
+            for movie_id in movie_ids[:5]:  # cap at 5 to avoid too many requests
+                async with sess.get(
+                    f"{_SUBSOURCE_BASE}/subtitles",
+                    params={"movieId": movie_id, "language": lang_param, "limit": 30},
+                    headers=headers, timeout=10,
+                ) as resp:
+                    if resp.status != 200:
+                        continue
+                    subs_data = await resp.json()
+                    for sub in subs_data.get("data", []):
+                        sub_id = sub.get("subtitleId") or sub.get("id")
+                        if sub_id and sub_id not in seen_sub_ids:
+                            seen_sub_ids.add(sub_id)
+                            all_subs_data.append(sub)
 
         results = []
-        for sub in subs_data.get("data", []):
+        for sub in all_subs_data:
             sub_id = sub.get("subtitleId") or sub.get("id")
             if not sub_id:
                 continue
@@ -729,24 +945,22 @@ async def search_subsource(
             hi = bool(sub.get("hearingImpaired", False))
             dl_url = f"{_SUBSOURCE_BASE}/subtitles/{sub_id}/download"
 
-            # Deconstruct releaseInfo list into individual distinct choices
             display_names = []
             if isinstance(rel_info, list) and rel_info:
                 display_names = [str(r).strip() for r in rel_info if str(r).strip()]
-            
+
             if not display_names:
                 comm = (sub.get("commentary") or "").split("\n")[0].strip()
                 display_names = [comm or f"SubSource_{sub_id}"]
 
             for idx, d_name in enumerate(display_names):
                 sub_season, sub_ep = extract_season_episode(d_name)
-                # If searching for TV show episode, filter by episode if available
+                # Only skip subs that explicitly tag a DIFFERENT episode
                 if episode is not None and sub_ep is not None and sub_ep != episode:
                     continue
                 if season is not None and sub_season is not None and sub_season != season:
                     continue
 
-                # Clean display name
                 clean_name = d_name if d_name.lower().endswith(".srt") else f"{d_name}.srt"
 
                 results.append({
@@ -778,8 +992,7 @@ async def download_subsource_option(
     target_filename: str = "",
 ) -> str | None:
     """Download a subtitle from SubSource (authenticated zip) and cache it."""
-    cache_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
-    temp_path = cache_path + ".tmp"
+    temp_path = _make_temp_sub_path(msg_id)
 
     api_key = getattr(_cfg, "SUBSOURCE_API_KEY", "")
     headers = {
@@ -806,60 +1019,61 @@ async def download_subsource_option(
                     chosen_name = None
                     norm_text = None
 
-                    # 1. Try matching by chosen release / card filename
-                    if filename:
-                        chosen_name, norm_text = _find_best_file_in_archive_tree(
-                            sub_files, extract_dir, filename, filename
-                        )
-                    
-                    # 2. Try matching by target video title & filename
-                    if not chosen_name or not norm_text:
-                        chosen_name, norm_text = _find_best_file_in_archive_tree(
-                            sub_files, extract_dir, target_title, target_filename
-                        )
+                    # 1. Primary: Match by target video title & filename (which contains S01E03)
+                    chosen_name, norm_text = _find_best_file_in_archive_tree(
+                        sub_files, extract_dir, target_title, target_filename
+                    )
 
-                    # 3. Fallback: take the largest / most complete subtitle file in archive
+                    # 2. Secondary: Try matching using card release name as both title & filename hint
                     if not chosen_name or not norm_text:
-                        # Prefer English or non-empty srt
+                        if filename:
+                            chosen_name, norm_text = _find_best_file_in_archive_tree(
+                                sub_files, extract_dir, filename, filename + ".srt"
+                            )
+
+                    # 3. Fallback: prefer English-named, then take largest subtitle
+                    if not chosen_name or not norm_text:
                         valid_subs = [p for p in sub_files if p.lower().endswith((".srt", ".vtt", ".ass"))]
                         if valid_subs:
-                            # Sort by file size descending
-                            valid_subs.sort(key=lambda p: os.path.getsize(p) if os.path.exists(p) else 0, reverse=True)
-                            best_p = valid_subs[0]
+                            # Prefer files with "english"/"eng" in name
+                            eng = [p for p in valid_subs if any(
+                                w in os.path.basename(p).lower() for w in ("english", "eng", ".en.")
+                            )]
+                            pick_list = eng if eng else valid_subs
+                            pick_list.sort(key=lambda p: os.path.getsize(p) if os.path.exists(p) else 0, reverse=True)
+                            best_p = pick_list[0]
                             chosen_name = os.path.relpath(best_p, extract_dir).replace("\\", "/")
                             with open(best_p, "rb") as f:
                                 norm_text = _normalize_subtitle_text(f.read(), best_p)
 
                     if chosen_name and norm_text:
                         print(f"[subsource] Extracted '{chosen_name}' from '{filename}'")
-                        with open(cache_path, "w", encoding="utf-8") as f:
-                            f.write(norm_text)
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                        return cache_path
+                        try:
+                            opt_cache_file = _get_option_cache_path("subsource", url, url, filename)
+                            with open(opt_cache_file, "w", encoding="utf-8") as of:
+                                of.write(norm_text)
+                        except Exception:
+                            pass
+                        return _safe_save_subtitle(msg_id, norm_text)
                 print(f"[subsource] No subtitle found in zip '{filename}'")
         except Exception as ze:
             print(f"[subsource] Zip extract error for '{filename}': {ze}")
-
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return None
 
     except Exception as e:
         print(f"[subsource] Download error for '{filename}': {e}")
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return None
+    finally:
+        _safe_remove(temp_path)
 
 
 # ── Yify online fallback ───────────────────────────────────────────────────────
 
 async def fetch_from_yify(msg_id: int, imdb_id: str) -> str | None:
-    """Query yifysubtitles.ch for English subtitle and cache it."""
+    """Query Yify subtitle sites for English subtitle and cache it."""
     if not imdb_id or not imdb_id.startswith("tt"):
         return None
 
-    url = f"https://yifysubtitles.ch/movie-imdb/{imdb_id}"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -867,50 +1081,52 @@ async def fetch_from_yify(msg_id: int, imdb_id: str) -> str | None:
         )
     }
 
-    try:
-        async with aiohttp.ClientSession() as sess:
-            async with sess.get(url, headers=headers, timeout=10) as resp:
-                if resp.status != 200:
-                    return None
-                html = await resp.text()
+    domains = ["yifysubtitles.ch", "yifysubtitles.org", "yify-subtitles.org", "yts-subs.com"]
 
-                matches = re.findall(r'href="(/subtitles/[^"]+-english-yify-[^"]+)"', html)
-                if not matches:
-                    matches = re.findall(
-                        r'href="(/subtitles/[^"]+)"[^>]*>.*?English',
-                        html, re.DOTALL | re.IGNORECASE,
-                    )
-                if not matches:
-                    return None
+    for domain in domains:
+        url = f"https://{domain}/movie-imdb/{imdb_id}"
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(url, headers=headers, timeout=10) as resp:
+                    if resp.status != 200:
+                        continue
+                    html = await resp.text()
 
-                sub_page_url = f"https://yifysubtitles.ch{matches[0]}"
-                async with sess.get(sub_page_url, headers=headers, timeout=10) as sub_resp:
-                    if sub_resp.status != 200:
-                        return None
-                    sub_html = await sub_resp.text()
+                    matches = re.findall(r'href="(/subtitles/[^"]+-english-yify-[^"]+)"', html)
+                    if not matches:
+                        matches = re.findall(
+                            r'href="(/subtitles/[^"]+)"[^>]*>.*?English',
+                            html, re.DOTALL | re.IGNORECASE,
+                        )
+                    if not matches:
+                        continue
 
-                    zip_matches = re.findall(r'href="(/subtitle/[^"]+\.zip)"', sub_html)
-                    if not zip_matches:
-                        slug = matches[0].replace("/subtitles/", "")
-                        zip_url = f"https://yifysubtitles.ch/subtitle/{slug}.zip"
-                    else:
-                        zip_url = f"https://yifysubtitles.ch{zip_matches[0]}"
+                    sub_page_url = f"https://{domain}{matches[0]}"
+                    async with sess.get(sub_page_url, headers=headers, timeout=10) as sub_resp:
+                        if sub_resp.status != 200:
+                            continue
+                        sub_html = await sub_resp.text()
 
-                    async with sess.get(zip_url, headers=headers, timeout=15) as zip_resp:
-                        if zip_resp.status != 200:
-                            return None
-                        zip_data = await zip_resp.read()
-                        with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
-                            for name in z.namelist():
-                                if name.lower().endswith(".srt"):
-                                    srt_content = z.read(name)
-                                    cache_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
-                                    with open(cache_path, "wb") as f:
-                                        f.write(srt_content)
-                                    print(f"[subtitles] Yify: saved {name}")
-                                    return cache_path
-    except Exception as e:
-        print(f"[subtitles] Yify error for imdb_id={imdb_id}: {e}")
+                        zip_matches = re.findall(r'href="(/subtitle/[^"]+\.zip)"', sub_html)
+                        if not zip_matches:
+                            slug = matches[0].replace("/subtitles/", "")
+                            zip_url = f"https://{domain}/subtitle/{slug}.zip"
+                        else:
+                            zip_url = f"https://{domain}{zip_matches[0]}"
+
+                        async with sess.get(zip_url, headers=headers, timeout=15) as zip_resp:
+                            if zip_resp.status != 200:
+                                continue
+                            zip_data = await zip_resp.read()
+                            with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+                                for name in z.namelist():
+                                    if name.lower().endswith(".srt"):
+                                        srt_content = z.read(name)
+                                        print(f"[subtitles] Yify ({domain}): saved {name}")
+                                        return _safe_save_subtitle(msg_id, srt_content)
+        except Exception as e:
+            print(f"[subtitles] Yify error on {domain} for imdb_id={imdb_id}: {e}")
+            continue
 
     return None
 
@@ -947,11 +1163,21 @@ def _normalize_subtitle_text(raw_bytes: bytes, filename: str) -> str:
 
 def _extract_single_archive(archive_path: str, dest_dir: str) -> bool:
     """Extract a single archive file (ZIP, RAR, 7z, TAR, etc.) into dest_dir."""
-    # 1. Native Python zipfile
+    # 1. Native Python zipfile (filtered for blazing speed)
     if zipfile.is_zipfile(archive_path):
         try:
             with zipfile.ZipFile(archive_path, "r") as z:
-                z.extractall(dest_dir)
+                # Fast extraction: only unpack subtitle and nested archive members
+                relevant = [
+                    m for m in z.namelist()
+                    if not m.startswith("__MACOSX")
+                    and not os.path.basename(m).startswith("._")
+                    and any(m.lower().endswith(ext) for ext in (_SUBTITLE_EXTS | _ARCHIVE_EXTS))
+                ]
+                if relevant:
+                    z.extractall(dest_dir, members=relevant)
+                else:
+                    z.extractall(dest_dir)
             return True
         except Exception:
             pass
@@ -960,10 +1186,20 @@ def _extract_single_archive(archive_path: str, dest_dir: str) -> bool:
     if tarfile.is_tarfile(archive_path):
         try:
             with tarfile.open(archive_path, "r:*") as t:
-                t.extractall(dest_dir)
+                relevant_tar = [
+                    m for m in t.getmembers()
+                    if any(m.name.lower().endswith(ext) for ext in (_SUBTITLE_EXTS | _ARCHIVE_EXTS))
+                ]
+                if relevant_tar:
+                    t.extractall(dest_dir, members=relevant_tar)
+                else:
+                    t.extractall(dest_dir)
             return True
         except Exception:
             pass
+
+    # Hidden console flag for Windows so background archive tools don't pop up a console/Terminal window
+    _no_win = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
     # 3. System bsdtar (built into Windows 10/11, macOS, Linux — supports .rar, .7z, .zip, etc.)
     tar_exe = shutil.which("tar")
@@ -974,6 +1210,7 @@ def _extract_single_archive(archive_path: str, dest_dir: str) -> bool:
                 capture_output=True,
                 text=True,
                 timeout=45,
+                creationflags=_no_win,
             )
             if res.returncode == 0:
                 return True
@@ -989,7 +1226,13 @@ def _extract_single_archive(archive_path: str, dest_dir: str) -> bool:
     ]:
         if shutil.which(tool):
             try:
-                res = subprocess.run(args, capture_output=True, text=True, timeout=45)
+                res = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                    creationflags=_no_win,
+                )
                 if res.returncode == 0:
                     return True
             except Exception:
@@ -1058,12 +1301,16 @@ def _find_best_file_in_archive_tree(
         rel_name = os.path.relpath(full_p, base_dir).replace("\\", "/")
         sc = calculate_match_score(target_title, target_filename, rel_name)
 
-        # Bonus for exact episode / season match
         s_s, s_e = extract_season_episode(rel_name)
-        if v_e is not None and s_e is not None and v_e == s_e:
-            sc += 100.0
-            if v_s is not None and s_s is not None and v_s == s_s:
-                sc += 50.0
+        if v_e is not None:
+            if s_e is not None:
+                if s_e == v_e:
+                    sc += 500.0
+                    if v_s is not None and s_s is not None and v_s == s_s:
+                        sc += 100.0
+                else:
+                    # Penalize wrong episode severely so it is NEVER chosen over the correct one
+                    sc -= 1000.0
 
         # Bonus for English indicators
         if any(w in rel_name.lower() for w in ["eng", "english", ".en."]):
@@ -1093,8 +1340,7 @@ async def _download_subtitle_msg(
     """Download a subtitle Telegram message and save it to the local cache.
     Intelligently handles single .srt/.vtt files as well as full-season / series .zip/.rar packs.
     """
-    cache_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
-    temp_path = cache_path + ".tmp"
+    temp_path = _make_temp_sub_path(msg_id)
 
     try:
         msgs = await client.get_messages(entity, ids=[sub_msg_id])
@@ -1127,21 +1373,19 @@ async def _download_subtitle_msg(
                             print(
                                 f"[subtitles] Extracted '{chosen_name}' from archive '{filename}' for '{target_title}'"
                             )
-                            with open(cache_path, "w", encoding="utf-8") as f:
-                                f.write(norm_text)
-
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                            return cache_path
+                            try:
+                                opt_cache_file = _get_option_cache_path("telegram", sub_msg_id, filename, filename)
+                                with open(opt_cache_file, "w", encoding="utf-8") as of:
+                                    of.write(norm_text)
+                            except Exception:
+                                pass
+                            return _safe_save_subtitle(msg_id, norm_text)
                         else:
                             print(f"[subtitles] No matching episode subtitle found in archive '{filename}'")
                     else:
                         print(f"[subtitles] No subtitle files discovered inside archive '{filename}'")
             except Exception as ze:
                 print(f"[subtitles] Archive extract failed for '{filename}': {ze}")
-
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
             return None
 
         else:
@@ -1150,23 +1394,22 @@ async def _download_subtitle_msg(
                 with open(temp_path, "rb") as f:
                     raw = f.read()
                 norm_text = _normalize_subtitle_text(raw, filename)
-                with open(cache_path, "w", encoding="utf-8") as f:
-                    f.write(norm_text)
-
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                return cache_path
+                try:
+                    opt_cache_file = _get_option_cache_path("telegram", sub_msg_id, filename, filename)
+                    with open(opt_cache_file, "w", encoding="utf-8") as of:
+                        of.write(norm_text)
+                except Exception:
+                    pass
+                return _safe_save_subtitle(msg_id, norm_text)
             except Exception as fe:
                 print(f"[subtitles] Error processing single sub '{filename}': {fe}")
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
                 return None
 
     except Exception as e:
         print(f"[subtitles] Download error sub_msg_id={sub_msg_id}: {e}")
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return None
+    finally:
+        _safe_remove(temp_path)
 
 
 
@@ -1254,18 +1497,13 @@ async def fetch_english_subtitle(msg_id: int, title: str, filename: str) -> str 
     return None
 
 
-async def list_subtitle_options(msg_id: int, title: str, filename: str) -> dict:
+async def list_subtitle_options(msg_id: int, title: str, filename: str, search_query: str = "", lang: str = "EN") -> dict:
     """Return all available subtitle options from the local channel index and online sources."""
-    v_s, v_e = extract_season_episode(f"{title} {filename}")
-    candidates = query_subtitle_index(title, filename, season=v_s, episode=v_e)
+    query_title = search_query.strip() if search_query and search_query.strip() else title
+    clean_lang = (lang or "EN").strip().upper()
 
-    if not candidates:
-        try:
-            await build_subtitle_index(incremental=True)
-            candidates = query_subtitle_index(title, filename, season=v_s, episode=v_e)
-        except Exception:
-            pass
-
+    # 0. Check fast memory cache for instant modal load / switching
+    cache_key = (msg_id, query_title.lower().strip(), clean_lang.lower().strip())
     current_sub_path = os.path.join(SUB_DIR, f"{msg_id}_en.srt")
     has_active_sub = os.path.exists(current_sub_path)
 
@@ -1286,7 +1524,153 @@ async def list_subtitle_options(msg_id: int, title: str, filename: str) -> dict:
         except Exception:
             pass
 
+    if not search_query and cache_key in _SUB_SEARCH_CACHE:
+        ts, cached_data = _SUB_SEARCH_CACHE[cache_key]
+        if time.time() - ts < _SEARCH_CACHE_TTL:
+            cached_copy = dict(cached_data)
+            cached_opts = [dict(opt) for opt in cached_data.get("options", [])]
+            for opt in cached_opts:
+                opt["is_active"] = bool(active_sub_name and active_sub_name in (opt.get("filename"), opt.get("original_filename")))
+            cached_copy["options"] = cached_opts
+            cached_copy["has_active_sub"] = has_active_sub
+            cached_copy["active_sub_name"] = active_sub_name
+            cached_copy["active_sub_source"] = active_sub_source
+            return cached_copy
+
+    v_s, v_e = extract_season_episode(f"{query_title} {filename}")
+    candidates = query_subtitle_index(query_title, filename, season=v_s, episode=v_e)
+
+    if not candidates and not search_query:
+        try:
+            await build_subtitle_index(incremental=True)
+            candidates = query_subtitle_index(query_title, filename, season=v_s, episode=v_e)
+        except Exception:
+            pass
+
     options = []
+    imdb_id = None
+    tmdb_id = None
+
+    try:
+        import cache as _cache
+        video = _cache._cache_meta.get(msg_id, {}) or _cache._cache_meta.get(str(msg_id), {})
+        album_id = video.get("album", "")
+        pm = _cache._poster_mem.get(album_id, {}) if album_id else {}
+        meta_dict = pm.get("meta", {})
+        imdb_id = meta_dict.get("imdb_id")
+        tmdb_id = meta_dict.get("tmdb_id")
+
+        if not imdb_id and (query_title or title):
+            try:
+                from imdb_search import search_imdb_for_album
+                search_res = search_imdb_for_album(query_title or title, filename)
+                if search_res:
+                    meta_res = search_res.get("meta", {})
+                    imdb_id = meta_res.get("imdb_id") or imdb_id
+                    tmdb_id = meta_res.get("tmdb_id") or tmdb_id
+            except Exception as ie:
+                print(f"[subtitles] IMDb lookup error: {ie}")
+    except Exception:
+        pass
+
+    # Concurrently search Subdl and SubSource in parallel for maximum speed
+    async def _fetch_subdl_task():
+        if not getattr(_cfg, "SUBDL_API_KEY", ""):
+            return []
+        try:
+            return await search_subdl(
+                title=query_title,
+                season=v_s,
+                episode=v_e,
+                imdb_id=imdb_id,
+                tmdb_id=tmdb_id,
+                languages=clean_lang,
+            )
+        except Exception as e:
+            print(f"[subtitles] Subdl options error: {e}")
+            return []
+
+    async def _fetch_subsource_task():
+        if not getattr(_cfg, "SUBSOURCE_API_KEY", ""):
+            return []
+        try:
+            return await search_subsource(
+                title=query_title,
+                season=v_s,
+                episode=v_e,
+                imdb_id=imdb_id,
+                languages=clean_lang,
+            )
+        except Exception as e:
+            print(f"[subtitles] SubSource options error: {e}")
+            return []
+
+    subdl_results, subsource_results = await asyncio.gather(
+        _fetch_subdl_task(),
+        _fetch_subsource_task(),
+    )
+
+    # 1. Subdl Options
+    for sub in (subdl_results or []):
+        s_opt, e_opt = extract_season_episode(sub["filename"])
+        eff_season = s_opt if s_opt is not None else v_s
+        eff_ep    = e_opt if e_opt is not None else v_e
+
+        display_fn = sub["filename"]
+        if eff_season is not None and eff_ep is not None and e_opt is None:
+            ep_tag_str = f"S{str(eff_season).zfill(2)}E{str(eff_ep).zfill(2)}"
+            display_fn = re.sub(r"(?i)\bComplete[. _-]?", "", sub["filename"]).strip()
+            display_fn = re.sub(r"(?i)\bS\d{1,2}\b", ep_tag_str, display_fn, count=1)
+            display_fn = display_fn.strip(" .-_")
+            if not display_fn:
+                display_fn = sub["filename"]
+
+        options.append({
+            "id": sub["id"],
+            "filename": display_fn,
+            "original_filename": sub["filename"],   # keep for download matching
+            "score": sub["score"],
+            "source": "subdl",
+            "url": sub["url"],
+            "language": sub.get("language", clean_lang),
+            "hi": sub.get("hi", False),
+            "ext": sub["ext"],
+            "season": eff_season,
+            "episode": eff_ep,
+            "is_active": bool(active_sub_name and active_sub_name in (display_fn, sub["filename"])),
+        })
+
+    # 2. SubSource Options
+    for sub in (subsource_results or []):
+        s_opt, e_opt = extract_season_episode(sub["filename"])
+        eff_season = s_opt if s_opt is not None else v_s
+        eff_ep    = e_opt if e_opt is not None else v_e
+
+        display_fn = sub["filename"]
+        if eff_season is not None and eff_ep is not None and e_opt is None:
+            ep_tag_str = f"S{str(eff_season).zfill(2)}E{str(eff_ep).zfill(2)}"
+            display_fn = re.sub(r"(?i)\bComplete[. _-]?", "", sub["filename"]).strip()
+            display_fn = re.sub(r"(?i)\bS\d{1,2}\b", ep_tag_str, display_fn, count=1)
+            display_fn = display_fn.strip(" .-_")
+            if not display_fn:
+                display_fn = sub["filename"]
+
+        options.append({
+            "id": sub["id"],
+            "filename": display_fn,
+            "original_filename": sub["filename"],
+            "score": sub["score"],
+            "source": "subsource",
+            "url": sub["url"],
+            "language": sub.get("language", clean_lang),
+            "hi": sub.get("hi", False),
+            "ext": sub["ext"],
+            "season": eff_season,
+            "episode": eff_ep,
+            "is_active": bool(active_sub_name and active_sub_name in (display_fn, sub["filename"])),
+        })
+
+    # 3. PRIORITY 3: Telegram Channel Candidates
     for sub_msg_id, sub_filename, score in candidates:
         s, e = extract_season_episode(sub_filename)
         options.append({
@@ -1301,94 +1685,20 @@ async def list_subtitle_options(msg_id: int, title: str, filename: str) -> dict:
             "is_active": bool(active_sub_name and active_sub_name == sub_filename),
         })
 
-    # Online Yify Option
-    try:
-        import cache as _cache
-        video = _cache._cache_meta.get(msg_id, {})
-        pm = _cache._poster_mem.get(video.get("album", ""), {})
-        imdb_id = pm.get("meta", {}).get("imdb_id")
-        tmdb_id = pm.get("meta", {}).get("tmdb_id")
-        if imdb_id:
-            yify_name = f"Yify Subtitles (IMDb {imdb_id})"
-            options.append({
-                "id": None,
-                "filename": yify_name,
-                "score": 85.0,
-                "source": "yify",
-                "imdb_id": imdb_id,
-                "ext": "srt",
-                "season": v_s,
-                "episode": v_e,
-                "is_active": bool(active_sub_source == "yify"),
-            })
-    except Exception:
-        imdb_id = None
-        tmdb_id = None
-
-    # Online Subdl Options
-    try:
-        if getattr(_cfg, "SUBDL_API_KEY", ""):
-            subdl_results = await search_subdl(
-                title=title,
-                season=v_s,
-                episode=v_e,
-                imdb_id=imdb_id,
-                tmdb_id=tmdb_id,
-            )
-            for sub in subdl_results:
-                options.append({
-                    "id": sub["id"],
-                    "filename": sub["filename"],
-                    "score": sub["score"],
-                    "source": "subdl",
-                    "url": sub["url"],
-                    "language": sub.get("language", "EN"),
-                    "hi": sub.get("hi", False),
-                    "ext": sub["ext"],
-                    "season": v_s,
-                    "episode": v_e,
-                    "is_active": bool(active_sub_name and active_sub_name == sub["filename"]),
-                })
-    except Exception as e:
-        print(f"[subtitles] Subdl options error: {e}")
-
-    # Online SubSource Options
-    try:
-        if getattr(_cfg, "SUBSOURCE_API_KEY", ""):
-            subsource_results = await search_subsource(
-                title=title,
-                season=v_s,
-                episode=v_e,
-                imdb_id=imdb_id,
-                languages="english",
-            )
-            for sub in subsource_results:
-                options.append({
-                    "id": sub["id"],
-                    "filename": sub["filename"],
-                    "score": sub["score"],
-                    "source": "subsource",
-                    "url": sub["url"],
-                    "language": sub.get("language", "English"),
-                    "hi": sub.get("hi", False),
-                    "ext": sub["ext"],
-                    "season": v_s,
-                    "episode": v_e,
-                    "is_active": bool(active_sub_name and active_sub_name == sub["filename"]),
-                })
-    except Exception as e:
-        print(f"[subtitles] SubSource options error: {e}")
-
-    return {
+    res_data = {
         "ok": True,
         "msg_id": msg_id,
         "title": title,
         "filename": filename,
+        "search_query": search_query,
+        "lang": clean_lang,
         "has_active_sub": has_active_sub,
         "active_sub_name": active_sub_name,
         "active_sub_source": active_sub_source,
         "options": options,
     }
+    _SUB_SEARCH_CACHE[cache_key] = (time.time(), res_data)
+    return res_data
 
 
 def _record_active_sub(msg_id: int, filename: str, source: str):
@@ -1413,7 +1723,23 @@ async def apply_subtitle_option(
     source: str = "telegram",
     url: str = "",
 ) -> str | None:
-    """Download and set the specific chosen subtitle for this video."""
+    """Download and set the specific chosen subtitle for this video with instant option cache."""
+    # 0. Instant Cache Check: If this option was previously downloaded/unzipped, apply it in 0ms!
+    opt_key_id = sub_msg_id if sub_msg_id is not None else (url or filename)
+    opt_cache_file = _get_option_cache_path(source, opt_key_id, url, filename)
+    if os.path.exists(opt_cache_file) and os.path.getsize(opt_cache_file) > 0:
+        try:
+            with open(opt_cache_file, "r", encoding="utf-8", errors="ignore") as f:
+                cached_text = f.read()
+            if cached_text.strip():
+                print(f"[subtitles] Instant local option cache hit for '{filename}'")
+                path = _safe_save_subtitle(msg_id, cached_text)
+                if path:
+                    _record_active_sub(msg_id, filename, source)
+                return path
+        except Exception as ce:
+            print(f"[subtitles] Option cache read error: {ce}")
+
     import cache as _cache
     video = _cache._cache_meta.get(msg_id) or _cache._cache_meta.get(str(msg_id)) or {}
     if not video:
@@ -1453,12 +1779,6 @@ async def apply_subtitle_option(
             target_title=title,
             target_filename=target_filename,
         )
-
-    elif source == "yify":
-        pm = _cache._poster_mem.get(video.get("album", ""), {})
-        imdb_id = pm.get("meta", {}).get("imdb_id")
-        if imdb_id:
-            path = await fetch_from_yify(msg_id, imdb_id)
 
     else:
         # Telegram source

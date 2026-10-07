@@ -2698,6 +2698,11 @@ async def stream_handler(request: web.Request):
     msg_id = int(request.match_info["msg_id"])
     meta = _meta(msg_id)
 
+    from downloads import get_download_path
+    local_path = get_download_path(msg_id)
+    if local_path and os.path.isfile(local_path):
+        return web.FileResponse(local_path)
+
     # ── Pure Telethon MTProto streaming path ──────────────────────────────
     # Fire msg fetch immediately — also primes _msg_cache so _tg_read's
     # first call hits cache instead of waiting for another RPC round-trip.
@@ -3298,6 +3303,18 @@ async def vlc_stream_handler(request: web.Request):
     """Raw byte-range stream for VLC — TG STREAMER parallel-worker approach."""
     msg_id = int(request.match_info["msg_id"])
     filename_from_url = request.match_info.get("filename", "")
+
+    from downloads import get_download_path
+    local_path = get_download_path(msg_id)
+    if local_path and os.path.isfile(local_path):
+        safe_fn = unquote(filename_from_url) if filename_from_url else os.path.basename(local_path)
+        return web.FileResponse(
+            local_path,
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": f'inline; filename="{safe_fn}"',
+            },
+        )
 
     meta = _meta(msg_id)
     msg = await _get_msg(msg_id)

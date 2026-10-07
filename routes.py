@@ -1,5 +1,6 @@
 import mimetypes, re, os, asyncio, hashlib as _hashlib, shutil, subprocess, time as _time
 from urllib.parse import unquote
+import aiohttp
 from aiohttp import web
 
 mimetypes.add_type("font/ttf", ".ttf")
@@ -84,6 +85,15 @@ from streaming import (
     _stream_cache_prewarm_offset,
     _vlc_instant_prewarm,
     prepare_new_stream_session,
+)
+from downloads import (
+    is_downloaded,
+    get_download_path,
+    get_download_status,
+    get_all_downloads_status,
+    clear_completed_downloads,
+    start_download,
+    delete_download,
 )
 
 # ── AUTH ──────────────────────────────────────────────────────────────────────
@@ -543,6 +553,7 @@ async def route_album_data(req: web.Request):
             "season": _parse_season(v.get("filename", "") or v.get("title", "")),
             "resume": resume_info.get(v["message_id"]),
             "has_sub": os.path.exists(os.path.join(_here, ".cache", "subtitles", f"{v['message_id']}_en.srt")),
+            "is_downloaded": is_downloaded(v["message_id"]),
         }
         for v in videos_sorted
     ]
@@ -1332,7 +1343,11 @@ def _find_vlc():
         for base in (
             os.environ.get("ProgramFiles", ""),
             os.environ.get("ProgramFiles(x86)", ""),
+            os.environ.get("LocalAppData", ""),
+            os.path.join(os.environ.get("LocalAppData", ""), "Programs") if os.environ.get("LocalAppData") else "",
         ):
+            if not base:
+                continue
             p = os.path.join(base, "VideoLAN", "VLC", "vlc.exe")
             if os.path.exists(p):
                 _VLC_PLUGIN_DIR = os.path.join(base, "VideoLAN", "VLC", "plugins")
@@ -1352,7 +1367,13 @@ def _find_vlc():
             if os.path.isdir(plugin_dir):
                 _VLC_PLUGIN_DIR = plugin_dir
                 break
-    return shutil.which("vlc")
+    w = shutil.which("vlc")
+    if w:
+        vlc_dir = os.path.dirname(w)
+        p_dir = os.path.join(vlc_dir, "plugins")
+        if os.path.isdir(p_dir):
+            _VLC_PLUGIN_DIR = p_dir
+    return w
 
 
 # _VLC_HTTP_PORT / _VLC_HTTP_PASS now sourced from config.py (env-tunable).
@@ -1501,11 +1522,18 @@ async def _launch_vlc_direct(
 
     # Build the streaming URL with filename for VLSub compatibility
     # VLSub uses the filename from the URL to search for subtitles
-    if filename:
+    local_path = get_download_path(msg_id)
+    if local_path and os.path.isfile(local_path):
+        vlc_target = local_path
+        is_local_file = True
+        print(f"[vlc] Playing from offline downloaded file: {local_path}")
+    elif filename:
         safe_name = _url_quote(filename, safe="")
-        stream_url = f"http://127.0.0.1:{PORT}/vlc/{msg_id}/{safe_name}"
+        vlc_target = f"http://127.0.0.1:{PORT}/vlc/{msg_id}/{safe_name}"
+        is_local_file = False
     else:
-        stream_url = f"http://127.0.0.1:{PORT}/vlc/{msg_id}"
+        vlc_target = f"http://127.0.0.1:{PORT}/vlc/{msg_id}"
+        is_local_file = False
 
     start_args = ["--start-time", str(int(resume_pos))] if resume_pos > 5 else []
     if resume_pos > 5:
@@ -1535,9 +1563,19 @@ async def _launch_vlc_direct(
         print(f"[vlc] ERROR: executable not found at {vlc_path!r}")
         return
 
-    # Check and fetch external English subtitles
+    # Check and fetch external English subtitles (fast timeout so VLC launch is instant)
     from subtitles import fetch_english_subtitle
-    sub_path = await fetch_english_subtitle(msg_id, display_title, filename)
+    sub_path = None
+    try:
+        sub_path = await asyncio.wait_for(
+            fetch_english_subtitle(msg_id, display_title, filename),
+            timeout=0.3,
+        )
+    except Exception as _sub_err:
+        print(f"[vlc] Subtitle fetch deferred for instant launch ({_sub_err})")
+        # Run full subtitle search in background for future/live caching
+        asyncio.create_task(fetch_english_subtitle(msg_id, display_title, filename))
+
     sub_args = [f"--sub-file={sub_path}"] if sub_path else []
 
     # Spawn VLC immediately — zero pre-launch blocking.
@@ -1564,26 +1602,24 @@ async def _launch_vlc_direct(
             "--sub-language=en,eng,English",
             "--sub-autodetect-file",
             *sub_args,
-            # Loopback delivery — reduce network-caching since 127.0.0.1 has
-            # no real network jitter; large values only delay first-frame render.
-            "--network-caching=2000",
-            "--file-caching=0",
-            "--live-caching=0",
-            "--disc-caching=0",
-            "--sout-mux-caching=0",
-            # Auto-reconnect if the local aiohttp stream drops momentarily.
-            "--http-reconnect",
-            # Don't trust container timestamps blindly — avoids jump-forward on
-            # streams where Telegram delivers chunks with irregular PTS values.
-            "--no-ts-trust-pcr",
+            # Caching: local files need file-caching to avoid rubberbanding;
+            # streaming URLs need network-caching instead.
+            *(
+                ["--file-caching=2000", "--network-caching=0", "--live-caching=0",
+                 "--disc-caching=0", "--sout-mux-caching=0"]
+                if is_local_file else
+                ["--network-caching=2000", "--file-caching=0", "--live-caching=0",
+                 "--disc-caching=0", "--sout-mux-caching=0", "--http-reconnect",
+                 "--no-ts-trust-pcr"]
+            ),
             *start_args,
-            stream_url,
+            vlc_target,
         ],
         cwd=_vlc_cwd,
         env=_env,
     )
     print(
-        f"[vlc] launched: {vlc_path} url={stream_url} "
+        f"[vlc] launched: {vlc_path} target={vlc_target} "
         f"title={display_title!r} resume={resume_pos:.1f}s"
     )
 
@@ -1620,7 +1656,8 @@ async def _launch_vlc_direct(
         except Exception as e:
             print(f"[vlc] phase2 prewarm failed msg={msg_id}: {e}")
 
-    asyncio.create_task(_async_prewarm())
+    if not local_path:
+        asyncio.create_task(_async_prewarm())
 
     # Cancel any existing VLC position pollers for any video, since only one VLC instance runs at a time
     for mid, task in list(_active_pollers.items()):
@@ -2984,6 +3021,8 @@ async def route_list_subtitles(req: web.Request):
     try:
         j = await req.json()
         msg_id = int(j.get("msg_id"))
+        search_query = str(j.get("search_query", "")).strip()
+        lang = str(j.get("lang", "EN")).strip()
         import cache as _cache
 
         meta = _cache._cache_meta.get(msg_id, {})
@@ -2991,7 +3030,7 @@ async def route_list_subtitles(req: web.Request):
         filename = meta.get("filename", "")
         from subtitles import list_subtitle_options
 
-        data = await list_subtitle_options(msg_id, title, filename)
+        data = await list_subtitle_options(msg_id, title, filename, search_query=search_query, lang=lang)
         return web.json_response(data)
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
@@ -3014,11 +3053,133 @@ async def route_apply_subtitle(req: web.Request):
             msg_id, sub_msg_id, filename, source=source, url=url
         )
         if sub_path:
+            # Hot-swap subtitle in running VLC via HTTP API
+            await _vlc_load_subtitle(sub_path)
             return web.json_response({"ok": True, "path": sub_path})
         return web.json_response({"ok": False, "error": "Failed to download selected subtitle"})
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
+
+async def _vlc_load_subtitle(sub_path: str) -> bool:
+    """Tell a running VLC instance to immediately load and display the new subtitle in real-time."""
+    if not sub_path or not os.path.exists(sub_path):
+        return False
+
+    abs_path = os.path.abspath(sub_path)
+    win_path = abs_path.replace("/", "\\")
+    fwd_path = abs_path.replace("\\", "/")
+    file_uri = "file:///" + fwd_path
+
+    status_url = f"http://127.0.0.1:{_VLC_HTTP_PORT}/requests/status.json"
+    auth = aiohttp.BasicAuth("", _VLC_HTTP_PASS)
+
+    success = False
+    try:
+        async with aiohttp.ClientSession() as sess:
+            # 1. Try adding subtitle using local path and file URI
+            for val_attempt in (fwd_path, win_path, file_uri):
+                try:
+                    async with sess.get(
+                        status_url,
+                        params={"command": "addsubtitle", "val": val_attempt},
+                        auth=auth,
+                        timeout=aiohttp.ClientTimeout(total=2),
+                    ) as r:
+                        if r.status in (200, 201):
+                            success = True
+                            data = await r.json(content_type=None)
+                            
+                            # 2. Find subtitle tracks and switch VLC to the newly added track
+                            sub_tracks = []
+                            info_cat = data.get("information", {}).get("category", {}) if isinstance(data, dict) else {}
+                            for stream_name, stream_info in info_cat.items():
+                                if isinstance(stream_info, dict) and stream_info.get("Type", "").lower() == "subtitle":
+                                    m = re.search(r"\d+", stream_name)
+                                    if m:
+                                        sub_tracks.append(int(m.group(0)))
+
+                            # If new subtitle tracks are registered, switch to the newest one
+                            if sub_tracks:
+                                newest_track = max(sub_tracks)
+                                try:
+                                    await sess.get(
+                                        status_url,
+                                        params={"command": "subtitle_track", "val": str(newest_track)},
+                                        auth=auth,
+                                        timeout=aiohttp.ClientTimeout(total=1.5),
+                                    )
+                                except Exception:
+                                    pass
+                            break
+                        else:
+                            print(f"[vlc] addsubtitle attempt ({val_attempt}) returned HTTP {r.status}")
+                except Exception as ex:
+                    print(f"[vlc] addsubtitle attempt ({val_attempt}) error: {ex}")
+
+            if success:
+                print(f"[vlc] Subtitle hot-swapped to '{abs_path}'")
+                return True
+    except Exception as e:
+        print(f"[vlc] Could not hot-swap subtitle: {e}")
+    return False
+
+
+# ── DOWNLOAD HANDLERS ─────────────────────────────────────────────────────────
+async def route_download_start(req: web.Request):
+    """POST /api/download/start  body: {"msg_id": 123}"""
+    try:
+        data = await req.json()
+        msg_id = int(data.get("msg_id", 0))
+        if not msg_id:
+            return web.json_response({"ok": False, "error": "missing msg_id"}, status=400)
+        res = await start_download(msg_id)
+        return web.json_response(res)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def route_download_status(req: web.Request):
+    """GET /api/download/status?msg_id=123"""
+    try:
+        msg_id = int(req.rel_url.query.get("msg_id", 0))
+        if not msg_id:
+            return web.json_response({"ok": False, "error": "missing msg_id"}, status=400)
+        res = get_download_status(msg_id)
+        return web.json_response(res)
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def route_download_delete(req: web.Request):
+    """POST /api/download/delete  body: {"msg_id": 123}"""
+    try:
+        data = await req.json()
+        msg_id = int(data.get("msg_id", 0))
+        if not msg_id:
+            return web.json_response({"ok": False, "error": "missing msg_id"}, status=400)
+        deleted = delete_download(msg_id)
+        return web.json_response({"ok": True, "deleted": deleted})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def route_download_all(req: web.Request):
+    """GET /api/download/all — return status and progress of all downloads."""
+    try:
+        items = get_all_downloads_status()
+        return web.json_response({"ok": True, "downloads": items})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
+
+
+async def route_download_clear_completed(req: web.Request):
+    """POST /api/download/clear_completed"""
+    try:
+        clear_completed_downloads()
+        return web.json_response({"ok": True})
+    except Exception as e:
+        return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
 # ── REFETCH MISSING THUMBS ────────────────────────────────────────────────────
@@ -3068,6 +3229,11 @@ def make_app():
     app.router.add_post("/api/subtitles/fetch", route_fetch_subtitle)
     app.router.add_post("/api/subtitles/list", route_list_subtitles)
     app.router.add_post("/api/subtitles/apply", route_apply_subtitle)
+    app.router.add_post("/api/download/start", route_download_start)
+    app.router.add_get("/api/download/status", route_download_status)
+    app.router.add_get("/api/download/all", route_download_all)
+    app.router.add_post("/api/download/delete", route_download_delete)
+    app.router.add_post("/api/download/clear_completed", route_download_clear_completed)
     app.router.add_post("/hls/{msg_id:\\d+}/start", route_hls_start)
     app.router.add_get("/hls/{msg_id:\\d+}/playlist.m3u8", route_hls_playlist)
     app.router.add_get("/hls/{msg_id:\\d+}/{seg_name}", route_hls_segment)

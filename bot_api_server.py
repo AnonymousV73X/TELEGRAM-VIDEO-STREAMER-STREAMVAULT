@@ -195,10 +195,11 @@ async def start_bot_api_server() -> bool:
             stdin=subprocess.DEVNULL,
             stdout=log_file if log_file else subprocess.PIPE,
             stderr=log_file if log_file else subprocess.STDOUT,
-            # On Windows, create a new process group so we can terminate
-            # the whole tree cleanly on shutdown without killing the parent.
+            # On Windows, create a new process group and suppress console window
             creationflags=(
-                subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+                (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+                if sys.platform == "win32"
+                else 0
             ),
         )
     except FileNotFoundError:

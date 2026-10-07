@@ -131,63 +131,100 @@
     var mr = meta ? '<div class="video-meta-row">' + meta + "</div>" : "";
     var displayName =
       v.caption && v.caption.trim() ? v.caption.trim() : v.title;
+    var playText = v.is_downloaded ? "Play" : "Play in VLC";
+    var copyBtn = v.is_downloaded
+      ? ""
+      : '<button class="play-btn-copy copy-btn" title="Copy stream URL" onclick="event.stopPropagation();copyUrl(\'' +
+        v.vlc +
+        "',this)\">" +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
+        "</button>";
     return (
-      '<div class="video-art" onclick="openVLC(' +
-      v.id +
-      ',null)" style="cursor:pointer">' +
-      '<div class="art-bg" style="' +
-      _bgs[s] +
-      ";background-image:radial-gradient(ellipse 70% 55% at " +
-      _gp[s] +
-      ",rgba(245,197,24," +
-      _go[s] +
-      ') 0%,transparent 70%)"></div>' +
-      '<div class="art-vignette"></div>' +
-      '<div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></div></div>' +
-      dur +
-      leftBadgeRow +
-      rightBadgeRow +
-      progressBar +
-      "</div>" +
-      '<div class="video-body"><div class="video-name">' +
-      displayName +
-      "</div>" +
-      mr +
-      '<div class="play-btn-row">' +
-      '<button class="play-btn" onclick="openVLC(' +
-      v.id +
-      ',this)">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="11" height="11"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>Play in VLC' +
-      "</button>" +
-      '<button class="play-btn-copy" title="Copy stream URL" onclick="event.stopPropagation();copyUrl(\'' +
-      v.vlc +
-      "',this)\">" +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
-      "</button>" +
-      '<button class="play-btn-copy" title="Choose Subtitles" onclick="event.stopPropagation();openSubChooser(' +
-      v.id +
-      ',this)">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M8 9h8"></path><path d="M8 13h6"></path></svg>' +
-      "</button>" +
-      "</div>" +
-      "</div>"
-    );
-  }
+        '<div class="video-art" onclick="openVLC(' +
+        v.id +
+        ',null)" style="cursor:pointer">' +
+        '<div class="art-bg" style="' +
+        _bgs[s] +
+        ";background-image:radial-gradient(ellipse 70% 55% at " +
+        _gp[s] +
+        ",rgba(245,197,24," +
+        _go[s] +
+        ') 0%,transparent 70%)"></div>' +
+        '<div class="art-vignette"></div>' +
+        '<div class="play-overlay"><div class="play-circle"><svg viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg></div></div>' +
+        dur +
+        leftBadgeRow +
+        rightBadgeRow +
+        progressBar +
+        "</div>" +
+        '<div class="video-body"><div class="video-name">' +
+        displayName +
+        "</div>" +
+        mr +
+        '<div class="play-btn-row">' +
+        '<button class="play-btn" onclick="openVLC(' +
+        v.id +
+        ',this)">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="11" height="11"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>' +
+        playText +
+        "</button>" +
+        copyBtn +
+        '<button class="play-btn-copy" title="Choose Subtitles" onclick="event.stopPropagation();openSubChooser(' +
+        v.id +
+        ',this)">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M8 9h8"></path><path d="M8 13h6"></path></svg>' +
+        "</button>" +
+        (v.is_downloaded
+          ? '<button class="play-btn-copy dl-btn downloaded" id="dl-btn-' +
+            v.id +
+            '" title="Downloaded (Offline ready)" style="border-color:#22c55e;color:#22c55e;cursor:default;" onclick="event.stopPropagation();">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '</button>' +
+            '<button class="play-btn-copy del-btn" id="del-btn-' +
+            v.id +
+            '" title="Delete downloaded video (free storage)" onclick="event.stopPropagation();svDeleteDownload(' +
+            v.id +
+            ',this)" style="border-color:rgba(239,68,68,.4);color:#ef4444;">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+            '</button>'
+          : '<button class="play-btn-copy dl-btn" id="dl-btn-' +
+            v.id +
+            '" title="Download Video" onclick="event.stopPropagation();svStartDownload(' +
+            v.id +
+            ',this)">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+            '</button>') +
+        "</div>" +
+        "</div>"
+      );
+    }
 
-  // Lazy build: only generate HTML when a slot first needs it.
-  // For large albums (500+ episodes) this cuts init time from O(n) to O(viewport).
-  var _videoById = {};
-  function _prebuild(videos) {
-    _html = {};
-    _videoById = {};
-    for (var i = 0; i < videos.length; i++)
-      _videoById[videos[i].id] = videos[i];
-  }
-  function _getHtml(id) {
-    if (!_html[id])
-      _html[id] = _buildHtml(_videoById[id] || { id: id, title: "" });
-    return _html[id];
-  }
+    // Lazy build: only generate HTML when a slot first needs it.
+    // For large albums (500+ episodes) this cuts init time from O(n) to O(viewport).
+    var _videoById = {};
+    function _prebuild(videos) {
+      _html = {};
+      _videoById = {};
+      for (var i = 0; i < videos.length; i++)
+        _videoById[videos[i].id] = videos[i];
+    }
+    function _getHtml(id) {
+      if (!_html[id])
+        _html[id] = _buildHtml(_videoById[id] || { id: id, title: "" });
+      return _html[id];
+    }
+    window._clearCardHtmlCache = function (id) {
+      if (id !== undefined) delete _html[id];
+      else _html = {};
+    };
+    window._rerenderCard = function (id) {
+      if (id !== undefined) delete _html[id];
+      else _html = {};
+      var card = document.querySelector('[data-mid="' + id + '"]');
+      if (card && _videoById[id]) {
+        card.innerHTML = _getHtml(id);
+      }
+    };
 
   // ── Sort / filter ───────────────────────────────────────────────────────────
   var allVideos = [],
