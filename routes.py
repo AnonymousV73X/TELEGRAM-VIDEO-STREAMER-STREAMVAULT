@@ -3245,6 +3245,7 @@ def make_app():
     app.router.add_post("/api/yt/info", route_yt_info)
     app.router.add_post("/api/yt/start", route_yt_start_stream)
     app.router.add_get("/api/yt/stream/{session_id}", route_yt_stream)
+    app.router.add_get("/api/yt/stream/{session_id}/{track}", route_yt_stream)
     # Static files (CSS served from disk — not embedded in Python source)
     app.router.add_static(
         "/static", os.path.join(_bundle_dir, "static"), show_index=False
