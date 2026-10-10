@@ -54,6 +54,9 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
     """Run yt-dlp in JSON extraction mode to get metadata & formats without downloading."""
     loop = asyncio.get_event_loop()
 
+    # Clean URL tracking parameters (e.g. ?si=...)
+    clean_url = url.split("?si=")[0].split("&si=")[0].strip()
+
     def _sync_extract():
         import yt_dlp
 
@@ -62,9 +65,13 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
             "no_warnings": True,
             "skip_download": True,
             "noplaylist": True,
+            "js_runtimes": {"node": {}},
+            "http_headers": {
+                "Accept-Language": "en-US,en;q=0.9",
+            },
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            return ydl.extract_info(url, download=False)
+            return ydl.extract_info(clean_url, download=False)
 
     info = await loop.run_in_executor(None, _sync_extract)
     if not info:
@@ -73,18 +80,22 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
     title = info.get("title", "YouTube Video")
     duration = info.get("duration", 0)
     thumbnail = info.get("thumbnail", "")
-    webpage_url = info.get("webpage_url", url)
+    webpage_url = info.get("webpage_url", clean_url)
 
     raw_formats = info.get("formats", [])
     qualities = []
     seen_heights = set()
 
     # Sort formats from highest resolution down
-    # Prioritize video streams with height information
+    # Prioritize real video streams (exclude storyboards / thumbnails / audio-only)
     valid_video_formats = []
     for f in raw_formats:
-        vcodec = f.get("vcodec", "none")
-        if vcodec != "none" and f.get("height"):
+        vcodec = f.get("vcodec") or "none"
+        format_note = (f.get("format_note") or "").lower()
+        format_id = str(f.get("format_id") or "")
+        h = f.get("height")
+        # Exclude storyboard streams (sb0, sb1...) and low-res previews (< 144p)
+        if vcodec != "none" and h and h >= 144 and not format_id.startswith("sb") and "storyboard" not in format_note:
             valid_video_formats.append(f)
 
     # Sort descending by height and fps
@@ -169,6 +180,8 @@ class YtStreamSession:
             "-f",
             fmt_spec,
             "--no-part",
+            "--js-runtimes",
+            "node",
             "-o",
             self.spool_path,
             "--ffmpeg-location",
