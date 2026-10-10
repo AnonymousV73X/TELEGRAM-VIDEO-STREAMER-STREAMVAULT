@@ -99,7 +99,7 @@ from downloads import (
 # ── AUTH ──────────────────────────────────────────────────────────────────────
 _AUTH_COOKIE = "sv_auth"
 _PUBLIC_PATHS = {"/login", "/api/login", "/healthz"}
-_PUBLIC_PREFIXES = ("/stream/", "/vlc/", "/poster/", "/static/")
+_PUBLIC_PREFIXES = ("/stream/", "/vlc/", "/poster/", "/static/", "/api/yt/stream/")
 
 # ── NOTIFICATION QUEUE ────────────────────────────────────────────────────────
 _notifications: list = []
