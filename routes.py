@@ -3240,6 +3240,11 @@ def make_app():
     app.router.add_post("/hls/{msg_id:\\d+}/stop", route_hls_stop)
     app.router.add_get("/api/stream_cache", route_stream_cache_stats)
     app.router.add_post("/api/clear_cache", route_clear_stream_cache)
+    # YouTube smooth streaming routes
+    from yt_streamer import route_yt_info, route_yt_start_stream, route_yt_stream
+    app.router.add_post("/api/yt/info", route_yt_info)
+    app.router.add_post("/api/yt/start", route_yt_start_stream)
+    app.router.add_get("/api/yt/stream/{session_id}", route_yt_stream)
     # Static files (CSS served from disk — not embedded in Python source)
     app.router.add_static(
         "/static", os.path.join(_bundle_dir, "static"), show_index=False

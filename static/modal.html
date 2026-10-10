@@ -50,4 +50,153 @@
   function openModal(html) { var m = document.getElementById('svModal'); var b = document.getElementById('svModalBody'); if (m && b) { b.innerHTML = html; m.style.display = 'flex'; } }
   function closeModal() { var m = document.getElementById('svModal'); if (m) m.style.display = 'none'; }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+
+  /* ── YouTube Lookahead Streamer Modal Logic ── */
+  var _ytCurrentData = null;
+  var _ytSelectedFormat = null;
+
+  window.openYtModal = function() {
+    _ytCurrentData = null;
+    _ytSelectedFormat = null;
+    var html = '<div class="yt-modal-card">'
+      + '<div class="yt-modal-head">'
+      + '  <div class="yt-modal-title">'
+      + '    <svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>'
+      + '    Smooth YouTube Streamer'
+      + '  </div>'
+      + '</div>'
+      + '<div style="font-size:.76rem;color:#888;line-height:1.4;">Paste a YouTube video link. StreamVault will probe resolutions and buffer video ahead to guarantee smooth 4K/2K playback on low bandwidth.</div>'
+      + '<div class="yt-input-row">'
+      + '  <input type="text" id="ytUrlInput" class="yt-url-input" placeholder="https://www.youtube.com/watch?v=..." onkeydown="if(event.key===\'Enter\')_ytFetchInfo()">'
+      + '  <button class="yt-fetch-btn" id="ytFetchBtn" onclick="_ytFetchInfo()">Fetch</button>'
+      + '</div>'
+      + '<div id="ytResultArea"></div>'
+      + '</div>';
+    openModal(html);
+    setTimeout(function(){
+      var inp = document.getElementById('ytUrlInput');
+      if (inp) inp.focus();
+    }, 100);
+  };
+
+  window._ytFetchInfo = async function() {
+    var inp = document.getElementById('ytUrlInput');
+    var btn = document.getElementById('ytFetchBtn');
+    var area = document.getElementById('ytResultArea');
+    if (!inp || !area) return;
+    var url = inp.value.trim();
+    if (!url) {
+      if (window._svNotify) window._svNotify('Please enter a YouTube link', true);
+      return;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="sv-spin-ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>&nbsp;Probing...';
+    area.innerHTML = '<div style="text-align:center;padding:24px 0;color:#999;font-size:.82rem;"><svg class="sv-spin-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite;margin-bottom:8px;"></svg><div>Extracting streams & resolutions...</div></div>';
+
+    try {
+      var r = await fetch('/api/yt/info', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: url})
+      });
+      var j = await r.json();
+      if (!j.ok) {
+        area.innerHTML = '<div style="color:#ef4444;font-size:.8rem;padding:12px;background:rgba(239,68,68,.1);border-radius:8px;">Error: ' + (j.error || 'Failed to extract video') + '</div>';
+        btn.disabled = false;
+        btn.textContent = 'Fetch';
+        return;
+      }
+      _ytCurrentData = j.data;
+      _ytRenderOptions();
+    } catch(err) {
+      area.innerHTML = '<div style="color:#ef4444;font-size:.8rem;padding:12px;background:rgba(239,68,68,.1);border-radius:8px;">Network error connecting to StreamVault server.</div>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Fetch';
+    }
+  };
+
+  function _ytRenderOptions() {
+    var area = document.getElementById('ytResultArea');
+    if (!area || !_ytCurrentData) return;
+    var d = _ytCurrentData;
+    var durMin = d.duration ? Math.floor(d.duration / 60) + 'm ' + (d.duration % 60) + 's' : '';
+    
+    // Default to highest or 1080p if available
+    var qs = d.qualities || [];
+    if (qs.length && !_ytSelectedFormat) {
+      _ytSelectedFormat = qs[0].format_id;
+    }
+
+    var listHtml = '';
+    qs.forEach(function(q) {
+      var badge = '';
+      if (q.height >= 2160) badge = '<span class="yt-badge-4k">4K</span>';
+      else if (q.height >= 1440) badge = '<span class="yt-badge-2k">2K</span>';
+      else if (q.height >= 720) badge = '<span class="yt-badge-hd">HD</span>';
+
+      var isSel = (q.format_id === _ytSelectedFormat);
+      var metaTxt = (q.vcodec ? q.vcodec.split('.')[0] : '') + (q.fps > 30 ? ' · ' + q.fps + 'fps' : '');
+
+      listHtml += '<div class="yt-quality-item' + (isSel ? ' selected' : '') + '" onclick="_ytSelectFormat(\'' + q.format_id + '\')">'
+        + '  <div class="yt-quality-label">' + badge + '<span>' + q.label + '</span></div>'
+        + '  <div class="yt-quality-meta">' + metaTxt + '</div>'
+        + '</div>';
+    });
+
+    area.innerHTML = '<div class="yt-preview-box">'
+      + (d.thumbnail ? '<img class="yt-preview-thumb" src="' + d.thumbnail + '">' : '')
+      + '<div class="yt-preview-info">'
+      + '  <div class="yt-preview-title">' + d.title + '</div>'
+      + (durMin ? '<div class="yt-preview-dur">⏱ ' + durMin + '</div>' : '')
+      + '</div>'
+      + '</div>'
+      + '<div style="font-size:.76rem;font-weight:700;color:#bbb;margin-top:4px;">Select Stream Resolution:</div>'
+      + '<div class="yt-quality-list">' + listHtml + '</div>'
+      + '<div class="yt-cushion-pill">⚡ Pre-buffers ahead into stream spool to guarantee smooth playback</div>'
+      + '<div class="yt-stream-action">'
+      + '  <button class="yt-stream-launch-btn" id="ytLaunchVlcBtn" onclick="_ytStartStream()">'
+      + '    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>'
+      + '    Stream in VLC'
+      + '  </button>'
+      + '</div>';
+  }
+
+  window._ytSelectFormat = function(fid) {
+    _ytSelectedFormat = fid;
+    _ytRenderOptions();
+  };
+
+  window._ytStartStream = async function() {
+    var btn = document.getElementById('ytLaunchVlcBtn');
+    if (!btn || !_ytCurrentData) return;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>&nbsp;Pre-buffering Stream...';
+
+    try {
+      var r = await fetch('/api/yt/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          url: _ytCurrentData.url,
+          format_id: _ytSelectedFormat,
+          title: _ytCurrentData.title,
+          launch_vlc: true
+        })
+      });
+      var j = await r.json();
+      if (j.ok) {
+        if (window._svNotify) window._svNotify('✓ Cushion buffered! Opening in VLC...');
+        closeModal();
+      } else {
+        if (window._svNotify) window._svNotify('Error: ' + (j.error || 'Failed to start stream'), true);
+        btn.disabled = false;
+        btn.textContent = 'Stream in VLC';
+      }
+    } catch(err) {
+      if (window._svNotify) window._svNotify('Network error initiating stream', true);
+      btn.disabled = false;
+      btn.textContent = 'Stream in VLC';
+    }
+  };
 </script>

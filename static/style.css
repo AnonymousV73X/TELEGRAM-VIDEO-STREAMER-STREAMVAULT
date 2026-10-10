@@ -421,3 +421,71 @@ body{padding-top:60px;}
 .alb-sel-btn.danger:hover{background:#ef4444;}
 .alb-sel-btn.secondary{background:rgba(255,255,255,.08);color:var(--text2);border:1.5px solid var(--border);}
 .alb-sel-btn.secondary:hover{border-color:var(--border-hi);color:var(--text);}
+
+/* ── YouTube Streamer Modal & Quality Selector ── */
+.yt-modal-card{
+  background:#0d0d0d;border:1.5px solid var(--border-hi);border-radius:18px;
+  padding:26px 26px 22px;max-width:540px;width:100%;
+  box-shadow:0 24px 72px rgba(0,0,0,.9);position:relative;
+  display:flex;flex-direction:column;gap:16px;
+}
+.yt-modal-head{display:flex;align-items:center;justify-content:space-between;}
+.yt-modal-title{font-size:1.05rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:10px;}
+.yt-modal-title svg{fill:#ff3333;width:22px;height:22px;}
+.yt-input-row{display:flex;gap:8px;}
+.yt-url-input{
+  flex:1;background:#141414;border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:#fff;font-size:.84rem;outline:none;transition:border-color .2s;
+}
+.yt-url-input:focus{border-color:var(--accent);}
+.yt-fetch-btn{
+  background:var(--accent);color:#000;border:none;border-radius:10px;
+  padding:0 18px;font-size:.8rem;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:opacity .15s;
+}
+.yt-fetch-btn:hover{opacity:.88;}
+.yt-fetch-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+.yt-preview-box{
+  display:flex;gap:14px;background:#141414;border:1px solid var(--border);
+  border-radius:12px;padding:12px;align-items:center;
+}
+.yt-preview-thumb{
+  width:110px;height:68px;border-radius:8px;object-fit:cover;background:#000;flex-shrink:0;
+}
+.yt-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.yt-preview-title{
+  font-size:.82rem;font-weight:700;color:#e8e8e8;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-clamp:2;overflow:hidden;
+}
+.yt-preview-dur{font-size:.7rem;color:var(--text2);font-weight:500;}
+
+.yt-quality-list{
+  display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;
+  padding-right:4px;
+}
+.yt-quality-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#141414;border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 14px;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.yt-quality-item:hover{border-color:var(--border-hi);background:rgba(255,255,255,.03);}
+.yt-quality-item.selected{border-color:var(--accent);background:rgba(245,197,24,.06);}
+.yt-quality-label{font-size:.82rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px;}
+.yt-badge-4k{background:rgba(239,68,68,.18);color:#ef4444;border:1px solid rgba(239,68,68,.3);font-size:.6rem;font-weight:800;padding:2px 6px;border-radius:4px;}
+.yt-badge-2k{background:rgba(168,85,247,.18);color:#a855f7;border:1px solid rgba(168,85,247,.3);font-size:.6rem;font-weight:800;padding:2px 6px;border-radius:4px;}
+.yt-badge-hd{background:rgba(34,197,94,.18);color:#22c55e;border:1px solid rgba(34,197,94,.3);font-size:.6rem;font-weight:800;padding:2px 6px;border-radius:4px;}
+.yt-quality-meta{font-size:.7rem;color:var(--text2);font-weight:600;}
+
+.yt-stream-action{display:flex;gap:10px;justify-content:flex-end;margin-top:4px;}
+.yt-stream-launch-btn{
+  background:var(--accent);color:#000;border:none;border-radius:10px;
+  height:40px;padding:0 22px;font-size:.82rem;font-weight:800;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;transition:opacity .2s,transform .15s;
+}
+.yt-stream-launch-btn:hover{opacity:.88;transform:translateY(-1px);}
+.yt-stream-launch-btn:active{transform:translateY(0);}
+.yt-stream-launch-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.yt-cushion-pill{
+  font-size:.72rem;color:#888;display:flex;align-items:center;gap:6px;margin-top:2px;
+}

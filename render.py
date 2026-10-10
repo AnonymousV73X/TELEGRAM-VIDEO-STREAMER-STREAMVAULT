@@ -306,7 +306,10 @@ def _nav(placeholder="Search albums…", show_search=True):
   </div>
   <style>.nav-notif-badge{{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;border-radius:8px;background:#f5c518;color:#000;font-size:.6rem;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 4px;animation:bell-pulse 2s ease-in-out infinite;pointer-events:none;}}@keyframes bell-pulse{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.15)}}}}</style>
   <div class="nav-right nav-links">
-
+    <button class="nav-btn" id="navYtBtn" onclick="openYtModal()" data-tip="Stream YouTube (4K / 2K with Pre-buffer)" data-tip-pos="bottom" style="border-color:rgba(255,0,0,.35);color:#ff4444;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+      YouTube
+    </button>
     <button class="nav-btn nav-history-btn" id="navHistoryBtn" onclick="toggleHistoryCard(event)" data-tip="Stream History" data-tip-pos="bottom">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       History
@@ -413,6 +416,10 @@ def _nav(placeholder="Search albums…", show_search=True):
     <input id="searchInputMobile" type="text" placeholder="{placeholder}" style="width:100%;" oninput="var d=document.getElementById('searchInput');if(d){{d.value=this.value;d.dispatchEvent(new Event('input'));}}">
   </div>
  
+  <button class="nav-btn" onclick="openYtModal();toggleDrawer();" style="width:100%;justify-content:flex-start;border-radius:var(--radius-sm);height:42px;border-color:rgba(255,0,0,.35);color:#ff4444;">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+    YouTube Stream
+  </button>
   <button class="nav-btn" onclick="toggleHistoryCard(event)" style="width:100%;justify-content:flex-start;border-radius:var(--radius-sm);height:42px;">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
     History
