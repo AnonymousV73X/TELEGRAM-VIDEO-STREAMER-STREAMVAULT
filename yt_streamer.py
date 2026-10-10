@@ -50,12 +50,19 @@ def _cleanup_old_spools():
 _cleanup_old_spools()
 
 
+_YT_INFO_CACHE: Dict[str, Any] = {}
+
+
 async def extract_yt_info(url: str) -> Dict[str, Any]:
     """Run yt-dlp in JSON extraction mode to get metadata & formats without downloading."""
     loop = asyncio.get_event_loop()
 
     # Clean URL tracking parameters (e.g. ?si=...)
     clean_url = url.split("?si=")[0].split("&si=")[0].strip()
+
+    # Instant return if recently probed
+    if clean_url in _YT_INFO_CACHE:
+        return _YT_INFO_CACHE[clean_url]
 
     def _sync_extract():
         import yt_dlp
@@ -66,6 +73,9 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
             "skip_download": True,
             "noplaylist": True,
             "js_runtimes": {"node": {}},
+            "youtube_include_dash_manifest": False,
+            "youtube_include_hls_manifest": False,
+            "extract_flat": False,
             "http_headers": {
                 "Accept-Language": "en-US,en;q=0.9",
             },
@@ -98,11 +108,17 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
         if vcodec != "none" and h and h >= 144 and not format_id.startswith("sb") and "storyboard" not in format_note:
             valid_video_formats.append(f)
 
-    # Sort descending by height and fps
-    valid_video_formats.sort(
-        key=lambda x: (x.get("height", 0), x.get("fps", 0) or 0, x.get("tbr", 0) or 0),
-        reverse=True,
-    )
+    # Sort descending by height, but prioritize hardware-accelerated codecs (avc1/mp4) over software VP9/AV1
+    def _format_sort_key(x):
+        h = x.get("height", 0) or 0
+        fps = x.get("fps", 0) or 0
+        vcodec = (x.get("vcodec") or "").lower()
+        # Prefer AVC / H.264 (hardware GPU decode) over VP9/AV1 (CPU heavy)
+        is_avc = 1 if (vcodec.startswith("avc") or "h264" in vcodec) else 0
+        tbr = x.get("tbr", 0) or 0
+        return (h, is_avc, fps, tbr)
+
+    valid_video_formats.sort(key=_format_sort_key, reverse=True)
 
     for f in valid_video_formats:
         h = f.get("height")
@@ -142,14 +158,19 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
                 "filesize": filesize,
             })
 
-    # Find best audio direct URL
+    # Find best audio direct URL (prefer mp4a/AAC for instant hardware sync with AVC video)
     best_audio_url = None
     audio_formats = [f for f in raw_formats if (f.get("vcodec") == "none" or not f.get("vcodec")) and f.get("acodec") != "none" and f.get("url")]
     if audio_formats:
-        audio_formats.sort(key=lambda x: x.get("abr", 0) or 0, reverse=True)
+        def _audio_sort_key(a):
+            acodec = (a.get("acodec") or "").lower()
+            is_aac = 1 if ("mp4a" in acodec or "aac" in acodec) else 0
+            abr = a.get("abr", 0) or 0
+            return (is_aac, abr)
+        audio_formats.sort(key=_audio_sort_key, reverse=True)
         best_audio_url = audio_formats[0].get("url")
 
-    return {
+    result = {
         "title": title,
         "duration": duration,
         "thumbnail": thumbnail,
@@ -157,6 +178,8 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
         "audio_url": best_audio_url,
         "qualities": qualities,
     }
+    _YT_INFO_CACHE[clean_url] = result
+    return result
 
 
 class YtProxyTrack:
@@ -271,10 +294,10 @@ class YtProxyTrack:
                 await asyncio.sleep(0.4)
                 continue
 
-            for idx in needed[:4]:  # fetch up to 4 concurrent pipeline chunks
+            for idx in needed[:2]:  # fetch 2 pipelined chunks concurrently
                 if idx not in self.chunks and idx not in self.fetch_tasks:
                     await self.get_chunk(idx)
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.3)  # Gentle pacing: prevents CPU saturation while maintaining full bandwidth
 
 
 class YtStreamSession:
@@ -283,8 +306,8 @@ class YtStreamSession:
     def __init__(self, session_id: str, title: str, video_url: str, audio_url: str):
         self.session_id = session_id
         self.title = title
-        self.video_track = YtProxyTrack("video", video_url, "video/webm")
-        self.audio_track = YtProxyTrack("audio", audio_url, "audio/webm") if audio_url else None
+        self.video_track = YtProxyTrack("video", video_url, "video/mp4")
+        self.audio_track = YtProxyTrack("audio", audio_url, "audio/mp4") if audio_url else None
         self.ready_event = asyncio.Event()
 
     async def prepare(self, initial_buffer_mb: float = 100.0):
@@ -294,9 +317,9 @@ class YtStreamSession:
             tasks.append(self.audio_track.init_size())
         await asyncio.gather(*tasks)
 
-        # 2. Pre-buffer initial cushion (100 MB on video, 10 MB on audio)
-        target_v = int(initial_buffer_mb * 1024 * 1024)
-        target_a = min(10 * 1024 * 1024, target_v // 10)
+        # 2. Pre-buffer initial cushion (60 MB on video, 8 MB on audio for quick start + high stability)
+        target_v = int(min(60.0, initial_buffer_mb) * 1024 * 1024)
+        target_a = min(8 * 1024 * 1024, target_v // 8)
         prebuf_tasks = [self.video_track.prebuffer_bytes(target_v)]
         if self.audio_track:
             prebuf_tasks.append(self.audio_track.prebuffer_bytes(target_a))
@@ -327,7 +350,7 @@ async def route_yt_info(req: web.Request):
 
 
 async def route_yt_start_stream(req: web.Request):
-    """POST /api/yt/start — Pre-buffers 100MB cushion, starts lookahead, and opens in VLC."""
+    """POST /api/yt/start — Pre-buffers cushion, starts lookahead, and opens in VLC with hardware acceleration."""
     try:
         body = await req.json()
         url = (body.get("url") or "").strip()
@@ -336,7 +359,7 @@ async def route_yt_start_stream(req: web.Request):
         format_id = (body.get("format_id") or "").strip()
         title = (body.get("title") or "YouTube Video").strip()
         launch_vlc = bool(body.get("launch_vlc", True))
-        initial_buffer_mb = float(body.get("buffer_mb", 100.0))
+        initial_buffer_mb = float(body.get("buffer_mb", 60.0))
 
         if not url:
             return web.json_response({"ok": False, "error": "URL is required"}, status=400)
@@ -363,7 +386,7 @@ async def route_yt_start_stream(req: web.Request):
         session = YtStreamSession(session_id, title, video_url, audio_url)
         _SESSIONS[session_id] = session
 
-        # Pre-buffer initial cushion (100 MB)
+        # Pre-buffer initial cushion
         await session.prepare(initial_buffer_mb=initial_buffer_mb)
 
         video_stream_url = f"http://127.0.0.1:{_cfg.PORT}/api/yt/stream/{session_id}/video"
@@ -378,10 +401,13 @@ async def route_yt_start_stream(req: web.Request):
                     video_stream_url,
                     "--meta-title",
                     title,
-                    "--network-caching=5000",
-                    "--live-caching=5000",
+                    "--avcodec-hw=any",       # Enable GPU hardware acceleration
+                    "--network-caching=6000", # 6 second network cache
+                    "--live-caching=6000",
                     "--file-caching=0",
                     "--http-reconnect",
+                    "--no-drop-late-frames",  # Prevent dropping frames during seek
+                    "--no-skip-frames",
                 ]
                 if audio_stream_url:
                     vlc_cmd.append(f"--input-slave={audio_stream_url}")
