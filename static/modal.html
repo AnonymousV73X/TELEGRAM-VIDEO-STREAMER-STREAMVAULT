@@ -171,7 +171,12 @@
     var btn = document.getElementById('ytLaunchVlcBtn');
     if (!btn || !_ytCurrentData) return;
     btn.disabled = true;
-    btn.innerHTML = '<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>&nbsp;Pre-buffering Stream...';
+    btn.innerHTML = '<svg class="sv-spin-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>';
+
+    var chosenQ = null;
+    if (_ytCurrentData.qualities) {
+      chosenQ = _ytCurrentData.qualities.find(function(q) { return String(q.format_id) === String(_ytSelectedFormat); });
+    }
 
     try {
       var r = await fetch('/api/yt/start', {
@@ -179,6 +184,8 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           url: _ytCurrentData.url,
+          video_url: chosenQ ? chosenQ.url : '',
+          audio_url: _ytCurrentData.audio_url || '',
           format_id: _ytSelectedFormat,
           title: _ytCurrentData.title,
           launch_vlc: true
@@ -186,17 +193,17 @@
       });
       var j = await r.json();
       if (j.ok) {
-        if (window._svNotify) window._svNotify('✓ Cushion buffered! Opening in VLC...');
+        if (window._svNotify) window._svNotify('✓ Opening stream in VLC with extended network cache...');
         closeModal();
       } else {
         if (window._svNotify) window._svNotify('Error: ' + (j.error || 'Failed to start stream'), true);
         btn.disabled = false;
-        btn.textContent = 'Stream in VLC';
+        btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg> Stream in VLC';
       }
     } catch(err) {
       if (window._svNotify) window._svNotify('Network error initiating stream', true);
       btn.disabled = false;
-      btn.textContent = 'Stream in VLC';
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg> Stream in VLC';
     }
   };
 </script>

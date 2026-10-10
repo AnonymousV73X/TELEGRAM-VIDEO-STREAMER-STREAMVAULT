@@ -137,15 +137,24 @@ async def extract_yt_info(url: str) -> Dict[str, Any]:
                 "format_id": format_id,
                 "ext": ext,
                 "vcodec": vcodec,
+                "url": f.get("url"),
                 "tbr": round(tbr, 1) if tbr else None,
                 "filesize": filesize,
             })
+
+    # Find best audio direct URL
+    best_audio_url = None
+    audio_formats = [f for f in raw_formats if (f.get("vcodec") == "none" or not f.get("vcodec")) and f.get("acodec") != "none" and f.get("url")]
+    if audio_formats:
+        audio_formats.sort(key=lambda x: x.get("abr", 0) or 0, reverse=True)
+        best_audio_url = audio_formats[0].get("url")
 
     return {
         "title": title,
         "duration": duration,
         "thumbnail": thumbnail,
         "url": webpage_url,
+        "audio_url": best_audio_url,
         "qualities": qualities,
     }
 
@@ -246,10 +255,12 @@ async def route_yt_info(req: web.Request):
 
 
 async def route_yt_start_stream(req: web.Request):
-    """POST /api/yt/start — Starts progressive buffering and returns stream URL once cushioned."""
+    """POST /api/yt/start — Resolves video + audio URLs and launches VLC directly with network caching."""
     try:
         body = await req.json()
         url = (body.get("url") or "").strip()
+        video_url = (body.get("video_url") or "").strip()
+        audio_url = (body.get("audio_url") or "").strip()
         format_id = (body.get("format_id") or "").strip()
         title = (body.get("title") or "YouTube Video").strip()
         launch_vlc = bool(body.get("launch_vlc", True))
@@ -257,39 +268,49 @@ async def route_yt_start_stream(req: web.Request):
         if not url:
             return web.json_response({"ok": False, "error": "URL is required"}, status=400)
 
-        session_id = uuid.uuid4().hex[:12]
-        session = YtStreamSession(session_id, url, format_id, title)
-        _SESSIONS[session_id] = session
+        # If direct URLs weren't passed, resolve them
+        if not video_url:
+            info = await extract_yt_info(url)
+            audio_url = info.get("audio_url") or ""
+            target_q = None
+            if format_id:
+                for q in info.get("qualities", []):
+                    if str(q.get("format_id")) == str(format_id):
+                        target_q = q
+                        break
+            if not target_q and info.get("qualities"):
+                target_q = info["qualities"][0]
+            if target_q:
+                video_url = target_q.get("url") or ""
 
-        # Start download & cushion buffer (e.g., 6 MB cushion for instant start + headroom)
-        asyncio.create_task(session.start(initial_buffer_mb=6.0, timeout_s=30.0))
-        await session.ready_event.wait()
-
-        if session.error:
-            return web.json_response({"ok": False, "error": session.error}, status=500)
-
-        stream_url = f"http://127.0.0.1:{_cfg.PORT}/api/yt/stream/{session_id}"
+        if not video_url:
+            return web.json_response({"ok": False, "error": "Could not resolve stream URL"}, status=500)
 
         if launch_vlc:
-            # Locate VLC and launch with extended cache buffer
             from routes import _find_vlc
             vlc = _find_vlc()
             if vlc:
                 vlc_cmd = [
                     vlc,
-                    stream_url,
+                    video_url,
                     "--meta-title",
                     title,
-                    "--network-caching=5000",
-                    "--file-caching=5000",
+                    "--network-caching=10000",
+                    "--live-caching=10000",
+                    "--file-caching=0",
+                    "--http-reconnect",
                 ]
-                subprocess.Popen(vlc_cmd, close_fds=True)
+                # If separate audio track exists, pass it to VLC
+                if audio_url and audio_url != video_url:
+                    vlc_cmd.append(f"--input-slave={audio_url}")
+
+                _env = os.environ.copy()
+                _vlc_cwd = os.path.dirname(vlc) if os.name == "nt" else None
+                subprocess.Popen(vlc_cmd, cwd=_vlc_cwd, env=_env, close_fds=True)
 
         return web.json_response({
             "ok": True,
-            "session_id": session_id,
-            "stream_url": stream_url,
-            "buffered_bytes": session.get_size(),
+            "stream_url": video_url,
         })
     except Exception as e:
         return web.json_response({"ok": False, "error": str(e)}, status=500)
