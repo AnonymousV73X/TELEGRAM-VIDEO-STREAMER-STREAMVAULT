@@ -91,7 +91,21 @@
     }
     btn.disabled = true;
     btn.innerHTML = '<svg class="sv-spin-ico" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>&nbsp;Probing...';
-    area.innerHTML = '<div style="text-align:center;padding:24px 0;color:#999;font-size:.82rem;"><svg class="sv-spin-ico" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite;margin-bottom:8px;"></svg><div>Extracting streams & resolutions...</div></div>';
+    // Instant preview: parse YouTube video ID & show thumbnail immediately in 0ms
+    var m = url.match(/(?:v=|\/|youtu\.be\/)([0-9A-Za-z_-]{11})/);
+    var vid = m ? m[1] : '';
+    var instantThumb = vid ? 'https://i.ytimg.com/vi/' + vid + '/hqdefault.jpg' : '';
+
+    area.innerHTML = '<div class="yt-preview-box" style="animation:sv-fade .2s ease">'
+      + (instantThumb ? '<img class="yt-preview-thumb" src="' + instantThumb + '">' : '')
+      + '<div class="yt-preview-info">'
+      + '  <div class="yt-preview-title" style="color:#aaa;">Probing video formats & resolutions...</div>'
+      + '  <div style="font-size:.74rem;color:var(--accent);margin-top:6px;display:flex;align-items:center;gap:6px;">'
+      + '    <svg class="sv-spin-ico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:sv-spin .7s linear infinite"></svg>'
+      + '    Extracting 4K/2K/1080p stream endpoints...'
+      + '  </div>'
+      + '</div>'
+      + '</div>';
 
     try {
       var r = await fetch('/api/yt/info', {
